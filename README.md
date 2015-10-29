@@ -1667,6 +1667,39 @@ Server: spray-can/1.3.3
 }
 ```
 
+# Running a Cromwell Server in Docker
+
+The root of this repository contains a `Dockerfile` which will build a container that is capable of running Cromwell server.  This image is build on top of [scala-baseimage](https://github.com/broadinstitute/scala-baseimage), which contains the proper toolchain (Java 8, Scala 2.11, SBT) as well as a process management system, [RUnit](http://smarden.org/runit1/), to ensure the Cromwell process is running
+
+The Dockerfile contains a few basic steps:
+
+1.  Mount the current directory to `/cromwell`
+2.  Run `/cromwell/docker/install.sh` to build a JAR file in the Docker container
+3.  Optionally install MySQL
+4.  Add Cromwell to the default runtime (under `/etc/service/cromwell`)
+
+To build the Docker container:
+
+```
+$ docker build .
+...
+Successfully built a6b33022073a
+```
+
+Then, start the container:
+
+```
+$ docker run -d a6b33022073a
+a9fd38a593a1f871720352ee493e46339191123e188a935e0162af5f6219845c
+```
+
+To get a shell on the running container:
+
+```
+$ docker exec -t -i a9fd38a593a1f871720352ee493e46339191123e188a935e0162af5f6219845c bash -l
+root@a9fd38a593a1:/#
+```
+
 # Developer
 
 ## Generate WDL Parser

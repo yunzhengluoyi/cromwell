@@ -10,10 +10,10 @@ RUN /cromwell/docker/install.sh /cromwell && \
     mkdir /etc/service/cromwell && \
     cp /cromwell/docker/run.sh /etc/service/cromwell/run
 
-# Install MySQL and add it as a service.  This is not required
+# Install MySQL and add it as a service.  This is not required, though
+# it is required if /etc/cromwell.conf is configured to use MySQL
 RUN /cromwell/docker/mysql_install.sh /cromwell && \
-    mkdir /etc/service/mysql && \
-    echo "service mysql start" > /etc/service/mysql/run
+    update-rc.d mysql defaults
 
 # These next 4 commands are for enabling SSH to the container.
 # id_rsa.pub is referenced below, but this should be any public key
