@@ -86,6 +86,20 @@ class CallExecutionActor(backendCall: BackendCall) extends Actor with CromwellAc
 
   override def receive = LoggingReceive {
     case mode: ExecutionMode =>
+
+      // JA: Try job avoidance
+      // Calculation includes:
+      //     Docker
+      //     Inputs
+      //     Instantiated command
+      //     Runtime Attributes
+      //     Backend
+      //     Outputs
+      // JA: if avoidable:
+      //     Copy data (different operation if local, jes)
+      //     context.parent ! CallActor.ExecutionFinished
+      logger.info(s"`${backendCall.hash}`")
+
       withRetry(mode.execute(backendCall),
         onSuccess = self ! IssuePollRequest(_),
         onFailure = self ! mode

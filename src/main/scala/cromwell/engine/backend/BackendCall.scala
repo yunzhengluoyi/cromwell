@@ -6,6 +6,7 @@ import cromwell.binding.values.WdlValue
 import cromwell.engine.WorkflowDescriptor
 import cromwell.engine.workflow.CallKey
 
+import scala.collection.immutable.ListMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -126,6 +127,43 @@ trait BackendCall {
    */
   def resume(jobKey: JobKey)(implicit ec: ExecutionContext): Future[ExecutionHandle] = {
     throw new NotImplementedError(s"resume() called on a non-resumable BackendCall: $this")
+  }
+
+  /**
+   * Compute a hash that uniquely identifies this call
+   */
+
+  private def _hash(command: String, inputs: String, runtime: String, outputs: String) = {
+    s"${backend.backendType}\n$inputs\n$command\n$runtime\n$outputs"
+  }
+
+  def hash: String = {
+    val orderedInputs = ListMap(locallyQualifiedInputs.toSeq.sortBy(_._1):_*) // TODO: call .hash on values
+
+    val runtime = call.task.runtimeAttributes
+    val orderedRuntime = ListMap(
+      ("docker", runtime.docker.getOrElse("")),
+      ("defaultZones", runtime.defaultZones.sorted.mkString(",")),
+      ("failOnStderr", runtime.failOnStderr.toString),
+      ("continueOnReturnCode", runtime.continueOnReturnCode match {
+        case ContinueOnReturnCodeFlag(bool) => bool.toString
+        case ContinueOnReturnCodeSet(codes) => codes.toList.sorted.mkString(",")
+      }),
+      ("cpu", runtime.cpu.toString),
+      ("preemptable", runtime.preemptible.toString),
+      ("defaultDisks", runtime.defaultDisks.sortWith((l, r) => l.getName > r.getName).map(d => s"${d.getName} ${d.size} ${d.getType}").mkString(",")),
+      ("memoryGB", runtime.memoryGB.toString)
+    )
+
+    val orderedOutputs = call.task.outputs.sortWith((l, r) => l.name > r.name).map(o => s"${o.wdlType.toWdlString} ${o.name} = ${o.expression.toWdlString}").mkString("\n")
+
+    Seq(
+      backend.backendType.toString,
+      call.task.commandTemplateString,
+      orderedInputs.map({case (k, v) => s"$k=$v"}).mkString("\n"),
+      orderedRuntime.map({case (k, v) => s"$k=$v"}).mkString("\n"),
+      orderedOutputs
+    ).mkString("\n---\n")
   }
 
   /**
