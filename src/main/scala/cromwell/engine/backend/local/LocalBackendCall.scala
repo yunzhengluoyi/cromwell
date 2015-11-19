@@ -29,5 +29,5 @@ case class LocalBackendCall(backend: LocalBackend,
 
   override def execute(implicit ec: ExecutionContext) = backend.execute(this)
 
-  override def poll(previous: ExecutionHandle)(implicit ec: ExecutionContext) = Future.successful(previous)
+  override def poll(previous: Option[ExecutionHandle])(implicit ec: ExecutionContext) = Future.successful(previous.get)
 }

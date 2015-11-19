@@ -71,9 +71,9 @@ class JesBackendCall(val backend: JesBackend,
 
   override def execute(implicit ec: ExecutionContext) = backend.execute(this)
 
-  override def poll(previous: ExecutionHandle)(implicit ec: ExecutionContext) = Future {
+  override def poll(previous: Option[ExecutionHandle])(implicit ec: ExecutionContext) = Future {
     previous match {
-      case handle: JesPendingExecutionHandle =>
+      case Some(handle: JesPendingExecutionHandle) =>
         val status = Try(handle.run.checkStatus(this, handle.previousStatus))
         status match {
           case Success(s: TerminalRunStatus) => backend.executionResult(s, handle)
