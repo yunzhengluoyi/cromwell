@@ -2,6 +2,7 @@ package cromwell.engine.backend.jes
 
 import java.nio.file.Paths
 
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.typesafe.scalalogging.LazyLogging
 import cromwell.binding._
 import cromwell.binding.values.WdlFile

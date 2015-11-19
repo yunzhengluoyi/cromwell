@@ -65,7 +65,6 @@ final case class FailedExecutionHandle(throwable: Throwable, returnCode: Option[
   override val result = FailedExecution(throwable, returnCode)
 }
 
-
 trait BackendCall {
 
   /**

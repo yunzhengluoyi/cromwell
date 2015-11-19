@@ -147,6 +147,12 @@ case class JesPendingExecutionHandle(backendCall: JesBackendCall,
   override def result = FailedExecution(new IllegalStateException)
 }
 
+case class JesRetryableExecutionHandle(retries: Option[Int]) extends ExecutionHandle {
+  override val isDone = false
+
+  override def result = FailedExecution(new IllegalStateException)
+}
+
 
 class JesBackend extends Backend with LazyLogging with ProductionJesAuthentication with ProductionJesConfiguration {
 
