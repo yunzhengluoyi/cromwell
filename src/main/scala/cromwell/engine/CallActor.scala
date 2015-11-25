@@ -9,13 +9,14 @@ import cromwell.binding.values.WdlValue
 import cromwell.engine.CallActor.{CallActorData, CallActorState}
 import cromwell.engine.CallExecutionActor.CallExecutionActorMessage
 import cromwell.engine.backend._
+import cromwell.engine.db.slick.Execution
 import cromwell.engine.workflow.{CallKey, WorkflowActor}
 import cromwell.logging.WorkflowLogger
 import cromwell.instrumentation.Instrumentation.Monitor
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
-
+import scala.util.{Try, Success, Failure}
 
 object CallActor {
 
@@ -25,6 +26,7 @@ object CallActor {
   }
   case object Start extends StartMode { override val executionMessage = CallExecutionActor.Execute }
   final case class Resume(jobKey: JobKey) extends StartMode { override val executionMessage = CallExecutionActor.Resume(jobKey) }
+  final case class UseCachedCall(execution: Execution) extends StartMode { override val executionMessage = CallExecutionActor.UseCachedCall(execution) }
   final case class RegisterCallAbortFunction(abortFunction: AbortFunction) extends CallActorMessage
   case object AbortCall extends CallActorMessage
   final case class ExecutionFinished(call: Call, executionResult: ExecutionResult) extends CallActorMessage
@@ -108,9 +110,30 @@ class CallActor(key: CallKey, locallyQualifiedInputs: CallInputs, backend: Backe
       // handle those immediately.
       context.parent ! WorkflowActor.CallStarted(key)
       val backendCall = backend.bindCall(workflowDescriptor, key, locallyQualifiedInputs, AbortRegistrationFunction(registerAbortFunction))
-      val executionActorName = s"CallExecutionActor-${workflowDescriptor.id}-${call.name}"
-      context.actorOf(CallExecutionActor.props(backendCall), executionActorName) ! startMode.executionMessage
-      goto(CallRunningAbortUnavailable)
+
+      def sendMsg = {
+        val executionActorName = s"CallExecutionActor-${workflowDescriptor.id}-${call.name}"
+        context.actorOf(CallExecutionActor.props(backendCall), executionActorName) ! startMode.executionMessage
+        goto(CallRunningAbortUnavailable)
+      }
+
+      import cromwell.engine.db.DataAccess._
+      val hash = backendCall.hash
+      logger.info(s"`$hash`")
+
+      globalDataAccess.getExecutionsWithResuableResultsByHash(hash) onComplete {
+        case Success(executions) if executions.nonEmpty =>
+          // cached call
+          //executions
+          false
+        case Success(executions) =>
+          // normal call
+          false
+        case Failure(ex) =>
+          // fail job?
+          false
+      }
+      sendMsg
     case Event(AbortCall, _) => handleFinished(call, AbortedExecution)
   }
 

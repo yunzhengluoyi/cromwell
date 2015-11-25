@@ -5,6 +5,7 @@ import akka.event.{Logging, LoggingReceive}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.util.ExponentialBackOff
 import cromwell.engine.backend._
+import cromwell.engine.db.slick.Execution
 import cromwell.logging.WorkflowLogger
 
 import scala.concurrent.duration._
@@ -28,6 +29,10 @@ object CallExecutionActor {
 
   final case class Resume(jobKey: JobKey) extends ExecutionMode {
     override def execute(backendCall: BackendCall)(implicit ec: ExecutionContext) = backendCall.resume(jobKey)
+  }
+
+  final case class UseCachedCall(execution: Execution) extends ExecutionMode {
+    override def execute(backendCall: BackendCall)(implicit ec: ExecutionContext) = backendCall.useCachedCall(execution)
   }
 
   def props(backendCall: BackendCall): Props = Props(new CallExecutionActor(backendCall))
@@ -86,20 +91,6 @@ class CallExecutionActor(backendCall: BackendCall) extends Actor with CromwellAc
 
   override def receive = LoggingReceive {
     case mode: ExecutionMode =>
-
-      // JA: Try job avoidance
-      // Calculation includes:
-      //     Docker
-      //     Inputs
-      //     Instantiated command
-      //     Runtime Attributes
-      //     Backend
-      //     Outputs
-      // JA: if avoidable:
-      //     Copy data (different operation if local, jes)
-      //     context.parent ! CallActor.ExecutionFinished
-      logger.info(s"`${backendCall.hash}`")
-
       withRetry(mode.execute(backendCall),
         onSuccess = self ! IssuePollRequest(_),
         onFailure = self ! mode

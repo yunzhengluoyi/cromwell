@@ -4,7 +4,9 @@ import cromwell.binding._
 import cromwell.binding.expression.WdlStandardLibraryFunctions
 import cromwell.binding.values.WdlValue
 import cromwell.engine.WorkflowDescriptor
+import cromwell.engine.db.slick.Execution
 import cromwell.engine.workflow.CallKey
+import cromwell.util.StringUtil._
 
 import scala.collection.immutable.ListMap
 import scala.concurrent.{ExecutionContext, Future}
@@ -129,17 +131,25 @@ trait BackendCall {
     throw new NotImplementedError(s"resume() called on a non-resumable BackendCall: $this")
   }
 
+  def useCachedCall(execution: Execution): Future[ExecutionHandle] = {
+    throw new NotImplementedError(s"useCachedCall() is not implemented for BackendCall: $this")
+  }
+
   /**
    * Compute a hash that uniquely identifies this call
    */
-
-  private def _hash(command: String, inputs: String, runtime: String, outputs: String) = {
-    s"${backend.backendType}\n$inputs\n$command\n$runtime\n$outputs"
-  }
-
   def hash: String = {
-    val orderedInputs = ListMap(locallyQualifiedInputs.toSeq.sortBy(_._1):_*) // TODO: call .hash on values
+    // JA: Try job avoidance
+    // Calculation includes:
+    //     Docker
+    //     Inputs
+    //     Instantiated command
+    //     Runtime Attributes
+    //     Backend
+    //     Outputs
 
+    val orderedInputs = ListMap(locallyQualifiedInputs.toSeq.sortBy(_._1):_*) // TODO: call .hash on values
+    val hasher = backend.fileHasher(workflowDescriptor)
     val runtime = call.task.runtimeAttributes
     val orderedRuntime = ListMap(
       ("docker", runtime.docker.getOrElse("")),
@@ -160,10 +170,10 @@ trait BackendCall {
     Seq(
       backend.backendType.toString,
       call.task.commandTemplateString,
-      orderedInputs.map({case (k, v) => s"$k=$v"}).mkString("\n"),
+      orderedInputs.map({case (k, v) => s"$k=${v.getHash(hasher).value}"}).mkString("\n"),
       orderedRuntime.map({case (k, v) => s"$k=$v"}).mkString("\n"),
       orderedOutputs
-    ).mkString("\n---\n")
+    ).mkString("\n---\n").md5Sum
   }
 
   /**

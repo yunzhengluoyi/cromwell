@@ -21,7 +21,7 @@ class TerminalLayout extends LayoutBase[ILoggingEvent] {
     val timestamp = new SimpleDateFormat("YYYY-MM-dd HH:mm:ss,SS").format(new Date())
 
     val ansiColor = Option(System.getProperty("RAINBOW_UUID")) match {
-      case Some(_) => "UUID\\((.*?)\\)".r.findFirstMatchIn(event.getFormattedMessage).map(s => (Math.abs(17 * s.group(1).map(_.toInt).product) % 209) + 22).getOrElse(2)
+      case Some(_) => "UUID\\((.*?)\\)".r.findFirstMatchIn(event.getFormattedMessage).map(s => (Math.abs(17 * s.group(1).substring(0,8).map(_.toInt).product) % 209) + 22).getOrElse(2)
       case None => 2
     }
 
