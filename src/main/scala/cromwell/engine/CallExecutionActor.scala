@@ -31,8 +31,8 @@ object CallExecutionActor {
     override def execute(backendCall: BackendCall)(implicit ec: ExecutionContext) = backendCall.resume(jobKey)
   }
 
-  final case class UseCachedCall(execution: Execution) extends ExecutionMode {
-    override def execute(backendCall: BackendCall)(implicit ec: ExecutionContext) = backendCall.useCachedCall(execution)
+  final case class UseCachedCall(backendCall: BackendCall, avoidedToBackendCall: BackendCall) extends ExecutionMode {
+    override def execute(backendCall: BackendCall)(implicit ec: ExecutionContext) = backendCall.useCachedCall(avoidedToBackendCall)
   }
 
   def props(backendCall: BackendCall): Props = Props(new CallExecutionActor(backendCall))

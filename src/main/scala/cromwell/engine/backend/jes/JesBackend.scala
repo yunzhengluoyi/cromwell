@@ -465,7 +465,7 @@ class JesBackend extends Backend with LazyLogging with ProductionJesAuthenticati
         case Run.Success if !continueOnReturnCode.continueFor(returnCode.get) =>
           FailedExecutionHandle(new Throwable(s"${log.tag} execution failed: disallowed command return code: " + returnCode.get))
         case Run.Success =>
-          handleSuccess(outputMappings, backendCall.workflowDescriptor, returnCode.get, handle)
+          handleSuccess(outputMappings, backendCall.workflowDescriptor, returnCode.get, backendCall.hash, handle)
         case Run.Failed(errorCode, errorMessage) =>
           val throwable = if (errorMessage contains "Operation canceled at") {
             new TaskAbortedException()
@@ -508,12 +508,13 @@ class JesBackend extends Backend with LazyLogging with ProductionJesAuthenticati
   private def handleSuccess(outputMappings: Map[String, Try[WdlValue]],
                             workflowDescriptor: WorkflowDescriptor,
                             returnCode: Int,
+                            hash: String,
                             executionHandle: ExecutionHandle): ExecutionHandle = {
 
     val taskOutputEvaluationFailures = outputMappings filter { _._2.isFailure }
     if (taskOutputEvaluationFailures.isEmpty) {
       val outputs = outputMappings collect { case (name, Success(wdlValue)) => name -> CallOutput(wdlValue, wdlValue.getHash(fileHasher(workflowDescriptor))) }
-      SuccessfulExecutionHandle(outputs, returnCode)
+      SuccessfulExecutionHandle(outputs, returnCode, hash)
     } else if (taskOutputEvaluationFailures forall (_._2.failed.get.isInstanceOf[SocketTimeoutException])) {
       // Assume this as a transient exception trying to do some expression evaluation that involves reading from GCS.
       // Return the input handle to try again.

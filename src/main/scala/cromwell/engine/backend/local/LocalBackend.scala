@@ -100,6 +100,15 @@ class LocalBackend extends Backend with SharedFileSystem {
     }
   } map CompletedExecutionHandle
 
+  def useCachedCall(avoidedTo: BackendCall, backendCall: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] = Future {
+    Try(avoidedTo.callRootPath.copyTo(backendCall.callRootPath)) match {
+      case Success(_) =>
+        val outputs = postProcess(backendCall)
+        CompletedExecutionHandle(SuccessfulExecution(outputs.get, avoidedTo.returnCode.contentAsString.stripLineEnd.toInt, avoidedTo.hash))
+      case Failure(ex) => FailedExecutionHandle(ex)
+    }
+  }
+
   /**
    * LocalBackend needs to force non-terminal calls back to NotStarted on restart.
    */
@@ -108,7 +117,7 @@ class LocalBackend extends Backend with SharedFileSystem {
     val StatusesNeedingUpdate = ExecutionStatus.values -- Set(ExecutionStatus.Failed, ExecutionStatus.Done, ExecutionStatus.NotStarted)
     def updateNonTerminalCalls(workflowId: WorkflowId, keyToStatusMap: Map[ExecutionDatabaseKey, CallStatus]): Future[Unit] = {
       val callFqnsNeedingUpdate = keyToStatusMap collect { case (callFqn, callStatus) if StatusesNeedingUpdate.contains(callStatus.executionStatus) => callFqn }
-      globalDataAccess.setStatus(workflowId, callFqnsNeedingUpdate, CallStatus(ExecutionStatus.NotStarted, None))
+      globalDataAccess.setStatus(workflowId, callFqnsNeedingUpdate, CallStatus(ExecutionStatus.NotStarted, None, None))
     }
 
     for {
@@ -177,7 +186,7 @@ class LocalBackend extends Backend with SharedFileSystem {
 
       def processSuccess(rc: Int) = {
         postProcess(backendCall) match {
-          case Success(outputs) => SuccessfulExecution(outputs, rc)
+          case Success(outputs) => SuccessfulExecution(outputs, rc, backendCall.hash)
           case Failure(e) =>
             val message = Option(e.getMessage) map { ": " + _ } getOrElse ""
             FailedExecution(new Throwable("Failed post processing of outputs" + message, e))

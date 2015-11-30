@@ -2,6 +2,7 @@ package cromwell.engine.backend.local
 
 import cromwell.binding.CallInputs
 import cromwell.engine.backend.{BackendCall, LocalFileSystemBackendCall, _}
+import cromwell.engine.db.slick.Execution
 import cromwell.engine.workflow.CallKey
 import cromwell.engine.{AbortRegistrationFunction, WorkflowDescriptor}
 
@@ -29,4 +30,7 @@ case class LocalBackendCall(backend: LocalBackend,
   override def execute(implicit ec: ExecutionContext) = backend.execute(this)
 
   override def poll(previous: ExecutionHandle)(implicit ec: ExecutionContext) = Future.successful(previous)
+
+  override def useCachedCall(avoidedTo: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] =
+    backend.useCachedCall(avoidedTo.asInstanceOf[LocalBackendCall], this)
 }

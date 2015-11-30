@@ -58,9 +58,9 @@ final case class CompletedExecutionHandle(override val result: ExecutionResult) 
   override val isDone = true
 }
 
-final case class SuccessfulExecutionHandle(outputs: CallOutputs, returnCode: Int) extends ExecutionHandle {
+final case class SuccessfulExecutionHandle(outputs: CallOutputs, returnCode: Int, hash: String) extends ExecutionHandle {
   override val isDone = true
-  override val result = SuccessfulExecution(outputs, returnCode)
+  override val result = SuccessfulExecution(outputs, returnCode, hash)
 }
 
 final case class FailedExecutionHandle(throwable: Throwable, returnCode: Option[Int] = None) extends ExecutionHandle {
@@ -131,7 +131,7 @@ trait BackendCall {
     throw new NotImplementedError(s"resume() called on a non-resumable BackendCall: $this")
   }
 
-  def useCachedCall(execution: Execution): Future[ExecutionHandle] = {
+  def useCachedCall(avoidedToBackendCall: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] = {
     throw new NotImplementedError(s"useCachedCall() is not implemented for BackendCall: $this")
   }
 
