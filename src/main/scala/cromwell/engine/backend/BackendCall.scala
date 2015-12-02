@@ -130,7 +130,7 @@ trait BackendCall {
     throw new NotImplementedError(s"resume() called on a non-resumable BackendCall: $this")
   }
 
-  def useCachedCall(avoidedToBackendCall: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] = {
+  def useCachedCall(cachedBackendCall: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] = {
     throw new NotImplementedError(s"useCachedCall() is not implemented for BackendCall: $this")
   }
 

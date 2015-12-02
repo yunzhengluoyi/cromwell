@@ -100,11 +100,11 @@ class LocalBackend extends Backend with SharedFileSystem {
     }
   } map CompletedExecutionHandle
 
-  def useCachedCall(avoidedTo: BackendCall, backendCall: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] = Future {
-    Try(avoidedTo.callRootPath.copyTo(backendCall.callRootPath)) match {
+  def useCachedCall(cachedBackendCall: BackendCall, backendCall: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] = Future {
+    Try(cachedBackendCall.callRootPath.copyTo(backendCall.callRootPath)) match {
       case Success(_) =>
         val outputs = postProcess(backendCall)
-        CompletedExecutionHandle(SuccessfulExecution(outputs.get, avoidedTo.returnCode.contentAsString.stripLineEnd.toInt, avoidedTo.hash))
+        CompletedExecutionHandle(SuccessfulExecution(outputs.get, cachedBackendCall.returnCode.contentAsString.stripLineEnd.toInt, cachedBackendCall.hash))
       case Failure(ex) => FailedExecutionHandle(ex)
     }
   }

@@ -86,8 +86,23 @@ case class GoogleCloudStorage(client: Storage) extends IOInterface {
     path
   }
 
+  /**
+    * Copy files with prefix `from` to files with prefix `to`
+    *
+    * For example, calling copyPrefix("gs://bucket/a/", "gs://other/prefix/"):
+    *
+    * 1) listContents(from) = Seq("gs://bucket/a/b.txt", "gs://bucket/a/b/c.txt")
+    * 2) The following copies will take place:
+    *     a) gs://bucket/a/b.txt -> gs://other/prefix/a/b.txt
+    *     b) gs://bucket/a/b/c.txt -> gs://other/prefix/a/b/c.txt
+    *
+    * @param from - GCS URL prefix to copy files from
+    * @param to - GCS URL prefix to copy files to
+    * @param logger - For logging progress
+    * @return - An Iterable of all of the copy attempts.  If all elements are `Success`, then
+    *         the copy operation was successful
+    */
   def copyPrefix(from: String, to: String, logger: Option[WorkflowLogger] = None): Iterable[Try[StorageObject]] = {
-    // TODO: listContents can throw an exception
     val sourceToDestinationMap = listContents(from) map { x =>
       GcsPath(x) -> GcsPath(x.replaceAll(s"^$from", to))
     }

@@ -4,7 +4,7 @@ import cromwell.binding.IOInterface
 import cromwell.binding.expression.WdlStandardLibraryFunctions
 import cromwell.binding.types.{WdlArrayType, WdlFileType}
 import cromwell.binding.values._
-import cromwell.util.google.{GcsPath, GcsPath$}
+import cromwell.util.google.GcsPath
 
 import scala.language.postfixOps
 import scala.util.{Success, Try}

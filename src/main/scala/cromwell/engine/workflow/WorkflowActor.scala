@@ -76,9 +76,9 @@ object WorkflowActor {
     override def handleStatusPersist(actor: WorkflowActor, data: WorkflowData)(implicit logger: WorkflowLogger): WorkflowData = data
   }
 
-  /** Represents starting a call for the first time, as opposed to a restart. */
+  /** This signifies using an existing previously run call to fulfill the results of the callKey. */
   final case class UseCachedCall(override val callKey: CallKey,
-                                 override val startMode: CallActor.StartMode) extends CallStartMessage {
+                                 override val startMode: CallActor.UseCachedCall) extends CallStartMessage {
 
     // Nothing to do here, startRunnableCalls will have already done this work.
     override def handleStatusPersist(actor: WorkflowActor, data: WorkflowData)(implicit logger: WorkflowLogger): WorkflowData = data
@@ -986,24 +986,26 @@ case class WorkflowActor(workflow: WorkflowDescriptor, backend: Backend)
                 callInputs,
                 AbortRegistrationFunction(registerAbortFunction)
               )
-              log.info(s"Cache hit! Using UUID(${cachedCall.workflowDescriptor.shortId}):${cachedCall.call.name} as results for UUID(${backendCall.workflowDescriptor.shortId}):${backendCall.call.name}")
+              logger.info(s"Call Caching: using UUID(${cachedCall.workflowDescriptor.shortId}):${cachedCall.call.name} as results for UUID(${backendCall.workflowDescriptor.shortId}):${backendCall.call.name}")
               self ! UseCachedCall(callKey, CallActor.UseCachedCall(backendCall, cachedCall))
             case _ =>
-              log.error(s"Unexpected error when resolving '${execution.callFqn}' in workflow with execution ID ${execution.workflowExecutionId}: falling back to normal execution")
+              logger.error(s"Call Caching: error when resolving '${execution.callFqn}' in workflow with execution ID ${execution.workflowExecutionId}: falling back to normal execution")
               self ! InitialStartCall(callKey, CallActor.Start)
           }
         case Failure(ex) =>
-          log.error(s"Unexpected error when loading workflow with execution ID ${execution.workflowExecutionId}: falling back to normal execution", ex)
+          logger.error(s"Call Caching: error when loading workflow with execution ID ${execution.workflowExecutionId}: falling back to normal execution", ex)
           self ! InitialStartCall(callKey, CallActor.Start)
       }
     }
 
-    globalDataAccess.getExecutionsWithResuableResultsByHash(backendCall.hash) onComplete {
+    val hash = backendCall.hash
+    globalDataAccess.getExecutionsWithResuableResultsByHash(hash) onComplete {
       case Success(executions) if executions.nonEmpty =>
         loadCachedCallOrInitiateCall(executions.head)
       case Success(_) =>
         self ! InitialStartCall(callKey, CallActor.Start)
       case Failure(ex) =>
+        logger.error(s"Call Caching: Failed to look up executions that matched hash '$hash'. Falling back to normal execution", ex)
         self ! InitialStartCall(callKey, CallActor.Start)
     }
   }
