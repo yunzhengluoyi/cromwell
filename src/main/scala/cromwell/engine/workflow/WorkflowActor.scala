@@ -13,6 +13,7 @@ import cromwell.engine.ExecutionStatus.ExecutionStatus
 import cromwell.engine._
 import cromwell.engine.backend.{Backend, JobKey}
 import cromwell.engine.db.DataAccess._
+import cromwell.engine.db.slick.Execution
 import cromwell.engine.db.{CallStatus, ExecutionDatabaseKey}
 import cromwell.engine.workflow.WorkflowActor._
 import cromwell.logging.WorkflowLogger
@@ -968,6 +969,45 @@ case class WorkflowActor(workflow: WorkflowDescriptor, backend: Backend)
     Success(ExecutionStartResult(Set(StartEntry(collector, ExecutionStatus.Starting))))
   }
 
+  private def sendStartMessage(callKey: CallKey, callInputs: Map[String, WdlValue]) = {
+    def registerAbortFunction(abortFunction: AbortFunction): Unit = {}
+    val backendCall = backend.bindCall(workflow, callKey, callInputs, AbortRegistrationFunction(registerAbortFunction))
+
+    /* Tries to use the cached Execution to send a UseCachedCall message.  If anything fails, send an InitialStartCall message */
+    def loadCachedCallOrInitiateCall(execution: Execution) = {
+      globalDataAccess.getWorkflow(execution.workflowExecutionId) onComplete {
+        case Success(cachedWorkflow) =>
+          cachedWorkflow.namespace.resolve(execution.callFqn) match {
+            case Some(c: Call) =>
+              val index = if (execution.index == -1) None else Option(execution.index)
+              val cachedCall = backend.bindCall(
+                cachedWorkflow,
+                CallKey(c, index),
+                callInputs,
+                AbortRegistrationFunction(registerAbortFunction)
+              )
+              log.info(s"Cache hit! Using UUID(${cachedCall.workflowDescriptor.shortId}):${cachedCall.call.name} as results for UUID(${backendCall.workflowDescriptor.shortId}):${backendCall.call.name}")
+              self ! UseCachedCall(callKey, CallActor.UseCachedCall(backendCall, cachedCall))
+            case _ =>
+              log.error(s"Unexpected error when resolving '${execution.callFqn}' in workflow with execution ID ${execution.workflowExecutionId}: falling back to normal execution")
+              self ! InitialStartCall(callKey, CallActor.Start)
+          }
+        case Failure(ex) =>
+          log.error(s"Unexpected error when loading workflow with execution ID ${execution.workflowExecutionId}: falling back to normal execution", ex)
+          self ! InitialStartCall(callKey, CallActor.Start)
+      }
+    }
+
+    globalDataAccess.getExecutionsWithResuableResultsByHash(backendCall.hash) onComplete {
+      case Success(executions) if executions.nonEmpty =>
+        loadCachedCallOrInitiateCall(executions.head)
+      case Success(_) =>
+        self ! InitialStartCall(callKey, CallActor.Start)
+      case Failure(ex) =>
+        self ! InitialStartCall(callKey, CallActor.Start)
+    }
+  }
+
   private def processRunnableCall(callKey: CallKey): Try[ExecutionStartResult] = {
     // In the `startRunnableCalls` context, record the call as Starting and initiate persistence.
     // The restart scenario assumes a restartable/resumable call is already in Running.
@@ -975,35 +1015,7 @@ case class WorkflowActor(workflow: WorkflowDescriptor, backend: Backend)
     persistStatus(callKey, ExecutionStatus.Starting)
 
     fetchLocallyQualifiedInputs(callKey) match {
-      case Success(callInputs) =>
-        def registerAbortFunction(abortFunction: AbortFunction): Unit = {}
-        val backendCall = backend.bindCall(workflow, callKey, callInputs, AbortRegistrationFunction(registerAbortFunction))
-        val hash = backendCall.hash
-
-        globalDataAccess.getExecutionsWithResuableResultsByHash(hash) onComplete {
-          case Success(executions) if executions.nonEmpty =>
-            globalDataAccess.getWorkflow(executions.head.workflowExecutionId) onComplete {
-              case Success(avoidedToWf) =>
-                avoidedToWf.namespace.resolve(executions.head.callFqn) match {
-                  case Some(c: Call) =>
-                    val index = if(executions.head.index == -1) None else Option(executions.head.index)
-                    val avoidedToBackendCall = backend.bindCall(
-                      avoidedToWf,
-                      CallKey(c, index),
-                      callInputs,
-                      AbortRegistrationFunction(registerAbortFunction)
-                    )
-                    log.info(s"Avoiding UUID(${backendCall.workflowDescriptor.shortId}):${backendCall.call.name} -> UUID(${avoidedToBackendCall.workflowDescriptor.shortId}):${avoidedToBackendCall.call.name}")
-                    self ! UseCachedCall(callKey, CallActor.UseCachedCall(backendCall, avoidedToBackendCall))
-                  case _ => // TODO
-                }
-              case Failure(ex) => // TODO
-            }
-          case Success(_) =>
-            self ! InitialStartCall(callKey, CallActor.Start)
-          case Failure(ex) =>
-          // fail job?
-        }
+      case Success(callInputs) => sendStartMessage(callKey, callInputs)
       case Failure(t) =>
         logger.error(s"Failed to fetch locally qualified inputs for call ${callKey.tag}", t)
         scheduleTransition(WorkflowFailed)

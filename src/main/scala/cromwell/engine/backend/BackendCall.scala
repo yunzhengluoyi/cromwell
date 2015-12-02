@@ -4,7 +4,6 @@ import cromwell.binding._
 import cromwell.binding.expression.WdlStandardLibraryFunctions
 import cromwell.binding.values.WdlValue
 import cromwell.engine.WorkflowDescriptor
-import cromwell.engine.db.slick.Execution
 import cromwell.engine.workflow.CallKey
 import cromwell.util.StringUtil._
 
@@ -139,17 +138,8 @@ trait BackendCall {
    * Compute a hash that uniquely identifies this call
    */
   def hash: String = {
-    // JA: Try job avoidance
-    // Calculation includes:
-    //     Docker
-    //     Inputs
-    //     Instantiated command
-    //     Runtime Attributes
-    //     Backend
-    //     Outputs
-
-    val orderedInputs = ListMap(locallyQualifiedInputs.toSeq.sortBy(_._1):_*) // TODO: call .hash on values
-    val hasher = backend.fileHasher(workflowDescriptor)
+    val orderedInputs = ListMap(locallyQualifiedInputs.toSeq.sortBy(_._1): _*)
+    val orderedOutputs = call.task.outputs.sortWith((l, r) => l.name > r.name)
     val runtime = call.task.runtimeAttributes
     val orderedRuntime = ListMap(
       ("docker", runtime.docker.getOrElse("")),
@@ -165,14 +155,13 @@ trait BackendCall {
       ("memoryGB", runtime.memoryGB.toString)
     )
 
-    val orderedOutputs = call.task.outputs.sortWith((l, r) => l.name > r.name).map(o => s"${o.wdlType.toWdlString} ${o.name} = ${o.expression.toWdlString}").mkString("\n")
 
     Seq(
       backend.backendType.toString,
       call.task.commandTemplateString,
-      orderedInputs.map({case (k, v) => s"$k=${v.getHash(hasher).value}"}).mkString("\n"),
+      orderedInputs.map({case (k, v) => s"$k=${v.getHash(backend.fileHasher(workflowDescriptor)).value}"}).mkString("\n"),
       orderedRuntime.map({case (k, v) => s"$k=$v"}).mkString("\n"),
-      orderedOutputs
+      orderedOutputs.map(o => s"${o.wdlType.toWdlString} ${o.name} = ${o.expression.toWdlString}").mkString("\n")
     ).mkString("\n---\n").md5Sum
   }
 

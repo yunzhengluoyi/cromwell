@@ -285,19 +285,24 @@ class JesBackend extends Backend with LazyLogging with ProductionJesAuthenticati
   def useCachedCall(avoidedTo: BackendCall, backendCall: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] = Future {
     val log = workflowLoggerWithCall(backendCall)
     authenticateAsUser(backendCall.workflowDescriptor) { gcs =>
-      println(s"### useCachedCall: ${avoidedTo.callGcsPath} -- ${backendCall.callGcsPath}")
       gcs.copyPrefix(avoidedTo.callGcsPath, backendCall.callGcsPath, Option(log)) match {
         case attempts if attempts.forall(_.isSuccess) =>
           postProcess(backendCall) match {
-            case Success(outputs) => SuccessfulExecutionHandle(outputs, avoidedTo.downloadRcFile.get.stripLineEnd.toInt, avoidedTo.hash)
+            case Success(outputs) => SuccessfulExecutionHandle(outputs, backendCall.downloadRcFile.get.stripLineEnd.toInt, backendCall.hash)
             case Failure(ex: AggregatedException[_]) if ex.exceptions.map(_.exception).isInstanceOf[SocketTimeoutException] =>
               // TODO: What can we return here to retry this operation?
-              FailedExecutionHandle(new Throwable("This should be properly retried but it is not implemented yet"))
+              val error = "Socket timeout occurred in evaluating one or more of the output expressions"
+              log.error(error, ex)
+              FailedExecutionHandle(new Throwable(error, ex))
             case Failure(ex) => FailedExecutionHandle(ex)
           }
         case attempts =>
-          log.error("Some failures occurred while copying cached outputs")
-          FailedExecutionHandle(new Throwable("todo"))
+          TryUtil.sequence(attempts.toSeq) match {
+            case Failure(ex) =>
+              log.error("Some failures occurred while copying cached outputs", ex)
+              FailedExecutionHandle(ex)
+            case _ => FailedExecutionHandle(new Throwable("Unknown error"))
+          }
       }
     }
   }

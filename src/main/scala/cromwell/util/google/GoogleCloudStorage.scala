@@ -87,6 +87,7 @@ case class GoogleCloudStorage(client: Storage) extends IOInterface {
   }
 
   def copyPrefix(from: String, to: String, logger: Option[WorkflowLogger] = None): Iterable[Try[StorageObject]] = {
+    // TODO: listContents can throw an exception
     val sourceToDestinationMap = listContents(from) map { x =>
       GcsPath(x) -> GcsPath(x.replaceAll(s"^$from", to))
     }
