@@ -285,8 +285,8 @@ class JesBackend extends Backend with LazyLogging with ProductionJesAuthenticati
   def useCachedCall(avoidedTo: BackendCall, backendCall: BackendCall)(implicit ec: ExecutionContext): Future[ExecutionHandle] = Future {
     val log = workflowLoggerWithCall(backendCall)
     authenticateAsUser(backendCall.workflowDescriptor) { gcs =>
-      gcs.copyPrefix(avoidedTo.callGcsPath, backendCall.callGcsPath, Option(log)) match {
-        case attempts if attempts.forall(_.isSuccess) =>
+      Try(gcs.copyPrefix(avoidedTo.callGcsPath, backendCall.callGcsPath, Option(log))) match {
+        case Success(attempts) if attempts.forall(_.isSuccess) =>
           postProcess(backendCall) match {
             case Success(outputs) => SuccessfulExecutionHandle(outputs, backendCall.downloadRcFile.get.stripLineEnd.toInt, backendCall.hash)
             case Failure(ex: AggregatedException[_]) if ex.exceptions.map(_.exception).isInstanceOf[SocketTimeoutException] =>
@@ -296,13 +296,16 @@ class JesBackend extends Backend with LazyLogging with ProductionJesAuthenticati
               FailedExecutionHandle(new Throwable(error, ex))
             case Failure(ex) => FailedExecutionHandle(ex)
           }
-        case attempts =>
+        case Success(attempts) =>
           TryUtil.sequence(attempts.toSeq) match {
             case Failure(ex) =>
               log.error("Some failures occurred while copying cached outputs", ex)
               FailedExecutionHandle(ex)
             case _ => FailedExecutionHandle(new Throwable("Unknown error"))
           }
+        case Failure(ex) =>
+          log.error(s"Exception occurred while attempting to copy outputs from ${avoidedTo.callGcsPath} to ${backendCall.callGcsPath}", ex)
+          FailedExecutionHandle(ex)
       }
     }
   }
