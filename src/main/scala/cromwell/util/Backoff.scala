@@ -37,6 +37,7 @@ object SimpleExponentialBackoff {
       .setMaxIntervalMillis(maxInterval.toMillis.toInt)
       .setMultiplier(multiplier)
       .setMaxElapsedTimeMillis(Int.MaxValue)
+      .setRandomizationFactor(0)
       .build())
   }
 }

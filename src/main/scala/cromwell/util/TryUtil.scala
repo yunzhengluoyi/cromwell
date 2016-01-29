@@ -31,7 +31,6 @@ object TryUtil {
   private def defaultIsFatal(t: Throwable): Boolean = false
   private def defaultIsTransient(t: Throwable): Boolean = false
 
-
   /**
     * Runs a block of code (`fn`) `retries` number of times until it succeeds.
     * It will use an InitializedBackoff instance to handle backoff timings and wait
@@ -63,14 +62,20 @@ object TryUtil {
                     failMessage: Option[String] = None,
                     priorValue: Option[T] = None,
                     isFatal: (Throwable) => Boolean = defaultIsFatal _,
-                    isTransient: (Throwable) => Boolean = defaultIsTransient _): Try[T] = {
+                    isTransient: (Throwable) => Boolean = defaultIsTransient _,
+                    failNTimes: Int = 5): Try[T] = {
     def logFailures(attempt: Try[T]): Unit = {
       attempt recover {
         case t: Throwable => logger.warn(t.getMessage, t)
       }
     }
 
-    Try { fn(priorValue) } match {
+    Try {
+      if (failNTimes > 0) {
+        logger.warn("#### pre-programmed failure")
+        throw new Exception("foobar")
+      } else fn(priorValue)
+    } match {
       case Success(x) if isSuccess(x) => Success(x)
       case Failure(f) if isFatal(f) => Failure(new CromwellFatalException(f))
       case value if (retryLimit.isDefined && retryLimit.get > 1) || retryLimit.isEmpty =>
@@ -97,7 +102,8 @@ object TryUtil {
           failMessage,
           value.toOption,
           isFatal = isFatal,
-          isTransient = isTransient
+          isTransient = isTransient,
+          failNTimes = failNTimes - 1
         )
       case f =>
         logFailures(f)
