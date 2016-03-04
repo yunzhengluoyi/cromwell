@@ -5,7 +5,7 @@ import java.sql.SQLException
 import akka.actor.{ActorRef, FSM, LoggingFSM, Props}
 import akka.event.Logging
 import akka.pattern.pipe
-import cromwell.backend.model.ExecutionHash
+import cromwell.caching.ExecutionHash
 import cromwell.engine.CallActor.CallActorMessage
 import cromwell.engine.ExecutionIndex._
 import cromwell.engine.ExecutionStatus.ExecutionStatus

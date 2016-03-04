@@ -8,7 +8,7 @@ import javax.sql.rowset.serial.SerialClob
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcProfile
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
-import cromwell.backend.model.ExecutionHash
+import cromwell.caching.ExecutionHash
 import cromwell.engine.ExecutionIndex._
 import cromwell.engine.ExecutionStatus._
 import cromwell.engine.backend.WorkflowQueryResult

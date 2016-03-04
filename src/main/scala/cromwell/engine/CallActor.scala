@@ -6,7 +6,9 @@ import akka.event.Logging
 import com.google.api.client.util.ExponentialBackOff
 import cromwell.backend.BackendActor.{FailedComputeHashResult, SuccessfulComputeHashResult, ComputeHash, Prepare}
 import cromwell.backend.config.BackendConfiguration
+import cromwell.backend.model._
 import cromwell.backend.{BackendActor, DefaultBackendFactory}
+import cromwell.caching.ExecutionHash
 import cromwell.engine.CallActor.{CallActorData, CallActorState}
 import cromwell.engine.backend._
 import cromwell.engine.db.DataAccess._
@@ -159,28 +161,28 @@ class CallActor(key: BackendCallKey, locallyQualifiedInputs: CallInputs, workflo
       stay()
   }
 
-  import cromwell.backend.model._
+  import cromwell.backend.model.CreatedTaskStatus
 
   whenUnhandled {
     case Event(Subscribed, _) =>
       sender ! Prepare
       stay()
-    case Event(TaskStatus(Status.Created), _) =>
+    case Event(CreatedTaskStatus(_,_), _) =>
       sender ! cromwell.backend.BackendActor.Execute
       stay()
-    case Event(TaskStatus(Status.Canceled), _) =>
+    case Event(CanceledTaskStatus, _) =>
       val errMsg = "Received a canceled or failed status without an execution result."
       logger.error(errMsg)
       val failureHandle = new NonRetryableExecution(new IllegalStateException(errMsg))
       self ! ExecutionFinished(call, failureHandle)
       stay()
-    case Event(TaskFinalStatus(Status.Failed, result: ExecutionResult), _) =>
-      val failureHandle = processFailedExecutionResult(result)
+    case Event(x:FailedTaskStatus, _) =>
+      val failureHandle = processFailedExecutionResult(x)
       self ! ExecutionFinished(call, failureHandle)
       stay()
-    case Event(TaskFinalStatus(Status.Succeeded, result: SuccessfulTaskResult), _) =>
-      val callOps: Map[String, CallOutput] = result.outputs.map(output => output._1 -> CallOutput(output._2, None))
-      val successResult = SuccessfulBackendCallExecution(callOps, Seq.empty, 0, new ExecutionHash(result.executionHash.overallHash, None))
+    case Event(SucceededTaskStatus(outputs, rc, hash), _) =>
+      val callOps: Map[String, CallOutput] = outputs.map(output => output._1 -> CallOutput(output._2, None))
+      val successResult = SuccessfulBackendCallExecution(callOps, Seq.empty, 0, new ExecutionHash(hash.overallHash, None))
       self ! ExecutionFinished(call, successResult)
       stay()
     case Event(ExecutionFinished(finishedCall, executionResult), _) => handleFinished(finishedCall, executionResult)
@@ -200,10 +202,10 @@ class CallActor(key: BackendCallKey, locallyQualifiedInputs: CallInputs, workflo
       stay()
   }
 
-  private def processFailedExecutionResult(result: ExecutionResult): FailedExecution = {
+  private def processFailedExecutionResult(result: FailedTaskStatus): FailedExecution = {
     result match {
-      case res: FailureTaskResult => new NonRetryableExecution(res.exception)
-      case res: FailureResult => new NonRetryableExecution(res.exception)
+      case res: FailedWithoutReturnCodeTaskStatus => new NonRetryableExecution(res.error)
+      case res: FailedWithReturnCodeTaskStatus => new NonRetryableExecution(res.error)
       case unknown => new NonRetryableExecution(new IllegalStateException(s"Unhandled failure result. Result received: $unknown."))
     }
   }
