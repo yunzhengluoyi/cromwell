@@ -224,4 +224,6 @@ testOptions in CromwellNoIntegrationTest := (testOptions in Test).value.diff(def
 //test in (NoTests, assemblyPackageDependency) := {}
 //test in (NoTests, assemblyPackageScala) := {}
 
+test in assembly := {}
+
 parallelExecution := false
