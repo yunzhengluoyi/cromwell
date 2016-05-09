@@ -1,15 +1,14 @@
-package cromwell.engine.workflow.lifecycle
+package cromwell.engine.workflow.lifecycle.execution
 
 import akka.actor.{FSM, LoggingFSM, Props}
 import com.typesafe.config.ConfigFactory
 import cromwell.backend.BackendJobExecutionActor.{BackendJobExecutionFailedResponse, BackendJobExecutionFailedRetryableResponse, BackendJobExecutionSucceededResponse, ExecuteJobCommand}
-import cromwell.backend.{BackendConfigurationDescriptor, BackendJobDescriptor, BackendJobDescriptorKey, BackendLifecycleActorFactory, JobKey}
+import cromwell.backend._
 import cromwell.core.{WorkflowId, _}
 import cromwell.engine.ExecutionIndex._
 import cromwell.engine.ExecutionStatus.NotStarted
 import cromwell.engine.backend.{BackendConfiguration, CromwellBackends}
-import cromwell.engine.workflow.lifecycle.WorkflowExecutionActor.WorkflowExecutionActorState
-import cromwell.engine.workflow.lifecycle.WorkflowExecutionActorData.ExecutionStore
+import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActor.WorkflowExecutionActorState
 import cromwell.engine.{CromwellWdlFunctions, EngineWorkflowDescriptor, ExecutionStatus}
 import lenthall.exception.ThrowableAggregation
 import wdl4s._
@@ -71,7 +70,7 @@ object WorkflowExecutionActor {
       * @param count Number of ways to scatter the children.
       * @return ExecutionStore of scattered children.
       */
-    def populate(count: Int): ExecutionStore = {
+    def populate(count: Int): Map[JobKey, ExecutionStatus.Value] = {
       val keys = this.scope.children flatMap { explode(_, count) }
       keys map { _ -> ExecutionStatus.NotStarted } toMap
     }
@@ -111,8 +110,6 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
   val tag = self.path.name
   private lazy val DefaultMaxRetriesFallbackValue = 10
 
-  private val calls = workflowDescriptor.backendDescriptor.workflowNamespace.workflow.calls
-
   // TODO: We should probably create a trait which loads all the configuration (once per application), and let classes mix it in
   // to avoid doing ConfigFactory.load() at multiple places
   val MaxRetries = ConfigFactory.load().getIntOption("system.max-retries") match {
@@ -122,6 +119,17 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
       DefaultMaxRetriesFallbackValue
   }
   private val workflow = workflowDescriptor.backendDescriptor.workflowNamespace.workflow
+  private val factories = TryUtil.sequenceMap(workflowDescriptor.backendAssignments.values.toSeq map { backendName =>
+    backendName -> CromwellBackends.shadowBackendLifecycleFactory(backendName)
+  } toMap) recover {
+    case e => throw new RuntimeException("Could not instantiate backend factories", e)
+  } get
+
+  private val configs = TryUtil.sequenceMap(workflowDescriptor.backendAssignments.values.toSeq map { backendName =>
+    backendName -> BackendConfiguration.backendConfigurationDescriptor(backendName)
+  } toMap) recover {
+    case e => throw new RuntimeException("Could not instantiate backend configurations", e)
+  } get
 
   // Initialize the StateData with ExecutionStore (all calls as NotStarted) and SymbolStore
   startWith(
@@ -129,83 +137,20 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
     WorkflowExecutionActorData(
       workflowDescriptor,
       executionStore = buildExecutionStore(),
-      outputStore = Map.empty))
+      outputStore = OutputStore.empty))
 
   def buildExecutionStore(): ExecutionStore = {
+    val workflow = workflowDescriptor.backendDescriptor.workflowNamespace.workflow
     // Only add direct children to the store, the rest is dynamically created when necessary
     val callExecutions = Scope.collectCalls(workflow.children) map { BackendJobDescriptorKey(_, None, 1) -> NotStarted }
     val scatterExecutions = Scope.collectScatters(workflow.children) map { ScatterKey(_, None) -> NotStarted }
 
-    (scatterExecutions ++ callExecutions) toMap
-  }
-
-  /** PBE: the return value of WorkflowExecutionActorState is just temporary.
-    *      This should probably return a Try[BackendJobDescriptor], Unit, Boolean,
-    *      Try[ActorRef], or something to indicate if the job was started
-    *      successfully.  Or, if it can fail to start, some indication of why it
-    *      failed to start
-    */
-  private def startJob(jobKey: BackendJobDescriptorKey,
-                       data: WorkflowExecutionActorData,
-                       configDescriptor: BackendConfigurationDescriptor,
-                       factory: BackendLifecycleActorFactory): Try[WorkflowExecutionDiff] = {
-    // FIXME This is a potential bottleneck as input evaluation can be arbitrarily long and executes code coming from the backend.
-    // It should probably be actorified / isolated
-    data.resolveAndEvaluate(jobKey, factory.expressionLanguageFunctions(workflowDescriptor.backendDescriptor, jobKey, configDescriptor)) map { inputs =>
-      val jobDescriptor = BackendJobDescriptor(workflowDescriptor.backendDescriptor, jobKey, inputs)
-      val actorName = s"${jobDescriptor.descriptor.id}-BackendExecutionActor-${jobKey.tag}".replaceAll("\\$", "")
-      val jobExecutionActor = context.actorOf(
-        factory.jobExecutionActorProps(
-          jobDescriptor,
-          BackendConfigurationDescriptor(configDescriptor.backendConfig, configDescriptor.globalConfig)
-        ),
-        actorName
-      )
-      jobExecutionActor ! ExecuteJobCommand
-      WorkflowExecutionDiff(Map(jobKey -> ExecutionStatus.Starting))
-    }
-  }
-
-  private def processRunnableJob(jobKey: BackendJobDescriptorKey, data: WorkflowExecutionActorData): Try[WorkflowExecutionDiff] = {
-    workflowDescriptor.backendAssignments.get(jobKey.call) match {
-      case None =>
-        val message = s"Could not start call ${jobKey.tag} because it was not assigned a backend"
-        log.error(s"$tag $message")
-        throw new IllegalStateException(s"$tag $message")
-      case Some(backendName) =>
-        // TODO these shouldn't be re-instantiated for every call
-        val attemptedConfigurationDescriptor = BackendConfiguration.backendConfigurationDescriptor(backendName)
-        val attemptedActorFactory = CromwellBackends.shadowBackendLifecycleFactory(backendName)
-
-        (attemptedConfigurationDescriptor, attemptedActorFactory) match {
-          case (Success(configDescriptor), Success(factory)) =>
-            startJob(jobKey, data, configDescriptor, factory)
-          case (_, _) =>
-            val errors = List(
-              attemptedActorFactory.failed.map(new Exception(s"Could not get BackendLifecycleActor for backend $backendName", _)).toOption,
-              attemptedConfigurationDescriptor.failed.map(new Exception(s"Could not get BackendConfigurationDescriptor for backend $backendName", _)).toOption
-            ).flatten
-            errors foreach(error => log.error(error.getMessage, error))
-            throw new WorkflowExecutionException(errors)
-        }
-    }
-  }
-
-  def handleCallSuccessful(jobKey: JobKey, outputs: CallOutputs, data: WorkflowExecutionActorData) = {
-    log.info(s"Job ${jobKey.tag} succeeded! Outputs: ${outputs.mkString("\n")}")
-    val newData = data.jobExecutionSuccess(jobKey, outputs)
-
-    if (newData.isWorkflowComplete) {
-      log.info(newData.outputsJson())
-      goto(WorkflowExecutionSuccessfulState) using newData
-    }
-    else
-      stay() using startRunnableJobs(newData)
+    ExecutionStore((scatterExecutions ++ callExecutions) toMap)
   }
 
   when(WorkflowExecutionPendingState) {
     case Event(StartExecutingWorkflowCommand, stateData) =>
-      val data = startRunnableJobs(stateData)
+      val data = startRunnableScopes(stateData)
       goto(WorkflowExecutionInProgressState) using data
     case Event(RestartExecutingWorkflowCommand, _) =>
       // TODO: Restart executing
@@ -269,10 +214,95 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
         * to the execution store with status as NotStarted. This allows startRunnableCalls to re-execute this job */
       val executionDiff = WorkflowExecutionDiff(Map(jobKey -> ExecutionStatus.Preempted, newJobKey -> ExecutionStatus.NotStarted))
       val newData = stateData.mergeExecutionDiff(executionDiff)
-      stay() using startRunnableJobs(newData)
+      stay() using startRunnableScopes(newData)
     } else {
       log.warning(s"Exhausted maximum number of retries for job ${jobKey.tag}. Failing.")
       goto(WorkflowExecutionFailedState) using stateData.mergeExecutionDiff(WorkflowExecutionDiff(Map(jobKey -> ExecutionStatus.Failed)))
+    }
+  }
+
+  def handleCallSuccessful(jobKey: JobKey, outputs: CallOutputs, data: WorkflowExecutionActorData) = {
+    log.info(s"Job ${jobKey.tag} succeeded! Outputs: ${outputs.mkString("\n")}")
+    val newData = data.jobExecutionSuccess(jobKey, outputs)
+
+    if (newData.isWorkflowComplete) {
+      log.info(newData.outputsJson())
+      goto(WorkflowExecutionSuccessfulState) using newData
+    }
+    else
+      stay() using startRunnableScopes(newData)
+  }
+
+  /**
+    * Attempt to start all runnable jobs and return updated state data.  This will create a new copy
+    * of the state data including new pending persists.
+    */
+  @tailrec
+  private def startRunnableScopes(data: WorkflowExecutionActorData): WorkflowExecutionActorData = {
+    val runnableScopes = data.executionStore.runnableScopes
+    val runnableCalls = runnableScopes collect { case c: Call => c.fullyQualifiedName }
+    if (runnableCalls.nonEmpty) log.info(s"Starting calls: " + runnableCalls.mkString(", "))
+
+    val dataDiffs = runnableScopes map {
+      case k: BackendJobDescriptorKey => processRunnableJob(k, data)
+      case k: ScatterKey => processRunnableScatter(k, data)
+      case k: CollectorKey => processRunnableCollector(k, data)
+      case k => Failure(new UnsupportedOperationException(s"Unknown entry in execution store: ${k.tag}"))
+    }
+
+    TryUtil.sequence(dataDiffs.toSeq) match {
+      case Success(diffs) if diffs.exists(_.containsNewEntry) => startRunnableScopes(data.mergeExecutionDiffs(diffs))
+      case Success(diffs) => data.mergeExecutionDiffs(diffs)
+      case Failure(e) =>
+        self ! JobInitializationFailed(e)
+        data
+    }
+  }
+
+  private def processRunnableJob(jobKey: BackendJobDescriptorKey, data: WorkflowExecutionActorData): Try[WorkflowExecutionDiff] = {
+    workflowDescriptor.backendAssignments.get(jobKey.call) match {
+      case None =>
+        val message = s"Could not start call ${jobKey.tag} because it was not assigned a backend"
+        log.error(s"$tag $message")
+        throw new IllegalStateException(s"$tag $message")
+      case Some(backendName) =>
+        (configs.get(backendName), factories.get(backendName)) match {
+          case (Some(configDescriptor), Some(factory)) =>
+            startJob(jobKey, data, configDescriptor, factory)
+          case (c, f) =>
+            val noConf = if (c.isDefined) None else Option(new Exception(s"Could not get BackendConfigurationDescriptor for backend $backendName"))
+            val noFactory = if (f.isDefined) None else Option(new Exception(s"Could not get BackendLifecycleActor for backend $backendName"))
+            val errors = List(noConf, noFactory).flatten
+            errors foreach(error => log.error(error.getMessage, error))
+            throw new WorkflowExecutionException(errors)
+        }
+    }
+  }
+
+  /** PBE: the return value of WorkflowExecutionActorState is just temporary.
+    *      This should probably return a Try[BackendJobDescriptor], Unit, Boolean,
+    *      Try[ActorRef], or something to indicate if the job was started
+    *      successfully.  Or, if it can fail to start, some indication of why it
+    *      failed to start
+    */
+  private def startJob(jobKey: BackendJobDescriptorKey,
+                       data: WorkflowExecutionActorData,
+                       configDescriptor: BackendConfigurationDescriptor,
+                       factory: BackendLifecycleActorFactory): Try[WorkflowExecutionDiff] = {
+    // FIXME This is a potential bottleneck as input evaluation can be arbitrarily long and executes code coming from the backend.
+    // It should probably be actorified / isolated
+    data.resolveAndEvaluate(jobKey, factory.expressionLanguageFunctions(workflowDescriptor.backendDescriptor, jobKey, configDescriptor)) map { inputs =>
+      val jobDescriptor = BackendJobDescriptor(workflowDescriptor.backendDescriptor, jobKey, inputs)
+      val actorName = s"${jobDescriptor.descriptor.id}-BackendExecutionActor-${jobKey.tag}".replaceAll("\\$", "")
+      val jobExecutionActor = context.actorOf(
+        factory.jobExecutionActorProps(
+          jobDescriptor,
+          BackendConfigurationDescriptor(configDescriptor.backendConfig, configDescriptor.globalConfig)
+        ),
+        actorName
+      )
+      jobExecutionActor ! ExecuteJobCommand
+      WorkflowExecutionDiff(Map(jobKey -> ExecutionStatus.Starting))
     }
   }
 
@@ -281,41 +311,16 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
 
     scatterKey.scope.collection.evaluate(lookup, CromwellWdlFunctions) map {
       case a: WdlArray => WorkflowExecutionDiff(scatterKey.populate(a.value.size) + (scatterKey -> ExecutionStatus.Done))
-      case v: WdlValue => throw new RuntimeException("Scatter collection must evaluate to an array")
+      case v: WdlValue => throw new Throwable("Scatter collection must evaluate to an array")
     }
   }
 
   private def processRunnableCollector(collector: CollectorKey, data: WorkflowExecutionActorData): Try[WorkflowExecutionDiff] = {
-    data.generateCollectorOutput(collector) match {
+    val shards = data.executionStore.findShardEntries(collector) collect { case (k: BackendJobDescriptorKey, v) if v == ExecutionStatus.Done => k }
+    data.outputStore.generateCollectorOutput(collector, shards) match {
       case Failure(e) => Failure(new RuntimeException(s"Failed to collect output shards for call ${collector.tag}"))
       case Success(outputs) => self ! ScatterCollectionSucceededResponse(collector, outputs)
         Success(WorkflowExecutionDiff(Map(collector -> ExecutionStatus.Starting)))
-    }
-  }
-
-  /**
-    * Attempt to start all runnable jobs and return updated state data.  This will create a new copy
-    * of the state data including new pending persists.
-    */
-  @tailrec
-  private def startRunnableJobs(data: WorkflowExecutionActorData): WorkflowExecutionActorData = {
-    val runnableScopes = data.runnableScopes
-    val runnableCalls = runnableScopes collect { case c: Call => c.fullyQualifiedName }
-    if (runnableCalls.nonEmpty) log.info(s"Starting calls: " + runnableCalls.mkString(", "))
-
-    val dataDiffs = runnableScopes map {
-      case k: BackendJobDescriptorKey => k -> processRunnableJob(k, data)
-      case k: ScatterKey => k -> processRunnableScatter(k, data)
-      case k: CollectorKey => k -> processRunnableCollector(k, data)
-      case k => k -> Failure(new UnsupportedOperationException(s"Unknown entry in execution store: ${k.tag}"))
-    } toMap
-
-    TryUtil.sequenceMap(dataDiffs) match {
-      case Success(diffs) if diffs.values.exists(_.containsNewEntry) => startRunnableJobs(data.mergeExecutionDiffs(diffs.values))
-      case Success(diffs) => data.mergeExecutionDiffs(diffs.values)
-      case Failure(e) =>
-        self ! JobInitializationFailed(e)
-        data
     }
   }
 }
