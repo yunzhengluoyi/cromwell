@@ -3,11 +3,12 @@ package cromwell.engine.workflow.lifecycle.execution
 import akka.actor.{FSM, LoggingFSM, Props}
 import com.typesafe.config.ConfigFactory
 import cromwell.backend.BackendJobExecutionActor.{BackendJobExecutionFailedResponse, BackendJobExecutionFailedRetryableResponse, BackendJobExecutionSucceededResponse, ExecuteJobCommand}
-import cromwell.backend._
+import cromwell.backend.{BackendJobDescriptor, BackendJobDescriptorKey, JobKey}
 import cromwell.core.{WorkflowId, _}
 import cromwell.engine.ExecutionIndex._
 import cromwell.engine.ExecutionStatus.NotStarted
 import cromwell.engine.backend.{BackendConfiguration, CromwellBackends}
+import cromwell.engine.workflow.lifecycle.execution.JobStarterActor.{BackendJobStartFailed, BackendJobStartSucceeded}
 import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActor.WorkflowExecutionActorState
 import cromwell.engine.{CromwellWdlFunctions, EngineWorkflowDescriptor, ExecutionStatus}
 import lenthall.exception.ThrowableAggregation
@@ -139,13 +140,17 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
       executionStore = buildExecutionStore(),
       outputStore = OutputStore.empty))
 
-  def buildExecutionStore(): ExecutionStore = {
+  private def buildExecutionStore(): ExecutionStore = {
     val workflow = workflowDescriptor.backendDescriptor.workflowNamespace.workflow
     // Only add direct children to the store, the rest is dynamically created when necessary
     val callExecutions = Scope.collectCalls(workflow.children) map { BackendJobDescriptorKey(_, None, 1) -> NotStarted }
     val scatterExecutions = Scope.collectScatters(workflow.children) map { ScatterKey(_, None) -> NotStarted }
 
     ExecutionStore((scatterExecutions ++ callExecutions) toMap)
+  }
+
+  private def buildActorName(jobDescriptor: BackendJobDescriptor) = {
+    s"${jobDescriptor.descriptor.id}-BackendExecutionActor-${jobDescriptor.key.tag}"
   }
 
   when(WorkflowExecutionPendingState) {
@@ -161,6 +166,12 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
   }
 
   when(WorkflowExecutionInProgressState) {
+    case Event(BackendJobStartSucceeded(jobDescriptor, actorProps), stateData) =>
+      context.actorOf(actorProps, buildActorName(jobDescriptor)) ! ExecuteJobCommand
+      stay() using stateData.mergeExecutionDiff(WorkflowExecutionDiff(Map(jobDescriptor.key -> ExecutionStatus.Running)))
+    case Event(BackendJobStartFailed(jobKey, t), stateData) =>
+      log.error(s"Failed to start job $jobKey", t)
+      goto(WorkflowExecutionFailedState) using stateData.mergeExecutionDiff(WorkflowExecutionDiff(Map(jobKey -> ExecutionStatus.Failed)))
     case Event(BackendJobExecutionSucceededResponse(jobKey, callOutputs), stateData) =>
       handleCallSuccessful(jobKey, callOutputs, stateData)
     case Event(BackendJobExecutionFailedResponse(jobKey, reason), stateData) =>
@@ -243,14 +254,15 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
     val runnableCalls = runnableScopes collect { case c: Call => c.fullyQualifiedName }
     if (runnableCalls.nonEmpty) log.info(s"Starting calls: " + runnableCalls.mkString(", "))
 
-    val dataDiffs = runnableScopes map {
+    // Each process*** returns a Try[WorkflowExecutionDiff], which, upon success, contains potential changes to be made to the execution store.
+    val executionDiffs = runnableScopes map {
       case k: BackendJobDescriptorKey => processRunnableJob(k, data)
       case k: ScatterKey => processRunnableScatter(k, data)
       case k: CollectorKey => processRunnableCollector(k, data)
       case k => Failure(new UnsupportedOperationException(s"Unknown entry in execution store: ${k.tag}"))
     }
 
-    TryUtil.sequence(dataDiffs.toSeq) match {
+    TryUtil.sequence(executionDiffs.toSeq) match {
       case Success(diffs) if diffs.exists(_.containsNewEntry) => startRunnableScopes(data.mergeExecutionDiffs(diffs))
       case Success(diffs) => data.mergeExecutionDiffs(diffs)
       case Failure(e) =>
@@ -268,7 +280,9 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
       case Some(backendName) =>
         (configs.get(backendName), factories.get(backendName)) match {
           case (Some(configDescriptor), Some(factory)) =>
-            startJob(jobKey, data, configDescriptor, factory)
+            val jobStarterActor = context.actorOf(JobStarterActor.props(data, jobKey, factory, configDescriptor))
+            jobStarterActor ! JobStarterActor.Start
+            Success(WorkflowExecutionDiff(Map(jobKey -> ExecutionStatus.Starting)))
           case (c, f) =>
             val noConf = if (c.isDefined) None else Option(new Exception(s"Could not get BackendConfigurationDescriptor for backend $backendName"))
             val noFactory = if (f.isDefined) None else Option(new Exception(s"Could not get BackendLifecycleActor for backend $backendName"))
@@ -276,33 +290,6 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
             errors foreach(error => log.error(error.getMessage, error))
             throw new WorkflowExecutionException(errors)
         }
-    }
-  }
-
-  /** PBE: the return value of WorkflowExecutionActorState is just temporary.
-    *      This should probably return a Try[BackendJobDescriptor], Unit, Boolean,
-    *      Try[ActorRef], or something to indicate if the job was started
-    *      successfully.  Or, if it can fail to start, some indication of why it
-    *      failed to start
-    */
-  private def startJob(jobKey: BackendJobDescriptorKey,
-                       data: WorkflowExecutionActorData,
-                       configDescriptor: BackendConfigurationDescriptor,
-                       factory: BackendLifecycleActorFactory): Try[WorkflowExecutionDiff] = {
-    // FIXME This is a potential bottleneck as input evaluation can be arbitrarily long and executes code coming from the backend.
-    // It should probably be actorified / isolated
-    data.resolveAndEvaluate(jobKey, factory.expressionLanguageFunctions(workflowDescriptor.backendDescriptor, jobKey, configDescriptor)) map { inputs =>
-      val jobDescriptor = BackendJobDescriptor(workflowDescriptor.backendDescriptor, jobKey, inputs)
-      val actorName = s"${jobDescriptor.descriptor.id}-BackendExecutionActor-${jobKey.tag}".replaceAll("\\$", "")
-      val jobExecutionActor = context.actorOf(
-        factory.jobExecutionActorProps(
-          jobDescriptor,
-          BackendConfigurationDescriptor(configDescriptor.backendConfig, configDescriptor.globalConfig)
-        ),
-        actorName
-      )
-      jobExecutionActor ! ExecuteJobCommand
-      WorkflowExecutionDiff(Map(jobKey -> ExecutionStatus.Starting))
     }
   }
 
