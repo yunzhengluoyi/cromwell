@@ -243,7 +243,7 @@ class JesBackendSpec extends FlatSpec with Matchers with Mockito with BeforeAndA
                         callName: String,
                         inputs: Map[String, WdlValue],
                         lookup: String => WdlValue,
-                        functions: JesCallEngineFunctionsOld = new JesCallEngineFunctionsOld(List(GcsFileSystem.defaultGcsFileSystem), new OldCallContextOld("root", "out", "err"))): BackendCallJobDescriptor = {
+                        functions: JesCallEngineFunctionsOld = new JesCallEngineFunctionsOld(List(GcsFileSystem.defaultGcsFileSystem), new OldCallContextOld("root", "out", "err"))): OldStyleBackendCallJobDescriptor = {
 
     val descriptor = materializeWorkflowDescriptorFromSources(workflowSources = wdl.asWorkflowSources()).copy(wfContext = new OldWorkflowContext("gs://foobar"))
     val jobDescriptor = mock[OldStyleBackendCallJobDescriptor]

@@ -1,8 +1,9 @@
 package cromwell.engine.workflow.lifecycle.execution
 
-import cromwell.engine.CromwellWdlFunctions
+import cromwell.engine.EngineWorkflowDescriptor
 import cromwell.engine.ExecutionIndex._
 import wdl4s._
+import wdl4s.expression.WdlStandardLibraryFunctions
 import wdl4s.values.{WdlArray, WdlCallOutputsObject, WdlValue}
 
 import scala.language.postfixOps
@@ -10,9 +11,19 @@ import scala.util.{Failure, Success, Try}
 
 trait WdlLookup {
 
-  def unqualifiedWorkflowInputs: Map[LocallyQualifiedName, WdlValue]
+  def workflowDescriptor: EngineWorkflowDescriptor
   def executionStore: ExecutionStore
   def outputStore: OutputStore
+  def expressionLanguageFunctions: WdlStandardLibraryFunctions
+
+  private lazy val splitInputs = workflowDescriptor.backendDescriptor.inputs map {
+    case (fqn, v) => splitFqn(fqn) -> v
+  }
+
+  // Unqualified workflow level inputs
+  private lazy val unqualifiedWorkflowInputs: Map[LocallyQualifiedName, WdlValue] = splitInputs collect {
+    case((root, inputName), v) if root == workflowDescriptor.namespace.workflow.unqualifiedName => inputName -> v
+  }
 
   /**
     * Lookup an identifier by
@@ -57,7 +68,7 @@ trait WdlLookup {
     if (identifier == scatter.item) {
       // Scatters are not indexed yet (they can't be nested)
       val scatterLookup = hierarchicalLookup(scatter, None) _
-      scatter.collection.evaluate(scatterLookup, CromwellWdlFunctions) map {
+      scatter.collection.evaluate(scatterLookup, expressionLanguageFunctions) map {
         case collection: WdlArray if collection.value.isDefinedAt(index) => collection.value(index)
         case collection: WdlArray => throw new RuntimeException(s"Index $index out of bound in $collection for scatter ${scatter.fullyQualifiedName}")
         case other => throw new RuntimeException(s"Scatter ${scatter.fullyQualifiedName} collection is not an array: $other")

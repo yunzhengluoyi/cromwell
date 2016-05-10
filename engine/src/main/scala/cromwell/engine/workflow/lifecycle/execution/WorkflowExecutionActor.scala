@@ -10,7 +10,7 @@ import cromwell.engine.ExecutionStatus.NotStarted
 import cromwell.engine.backend.{BackendConfiguration, CromwellBackends}
 import cromwell.engine.workflow.lifecycle.execution.JobStarterActor.{BackendJobStartFailed, BackendJobStartSucceeded}
 import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActor.WorkflowExecutionActorState
-import cromwell.engine.{CromwellWdlFunctions, EngineWorkflowDescriptor, ExecutionStatus}
+import cromwell.engine.{EngineELF, EngineWorkflowDescriptor, ExecutionStatus}
 import lenthall.exception.ThrowableAggregation
 import wdl4s._
 import wdl4s.util.TryUtil
@@ -132,6 +132,8 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
     case e => throw new RuntimeException("Could not instantiate backend configurations", e)
   } get
 
+  private val expressionLanguageFunctions = new EngineELF(workflowDescriptor.backendDescriptor.workflowOptions)
+
   // Initialize the StateData with ExecutionStore (all calls as NotStarted) and SymbolStore
   startWith(
     WorkflowExecutionPendingState,
@@ -251,7 +253,7 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
   @tailrec
   private def startRunnableScopes(data: WorkflowExecutionActorData): WorkflowExecutionActorData = {
     val runnableScopes = data.executionStore.runnableScopes
-    val runnableCalls = runnableScopes collect { case c: Call => c.fullyQualifiedName }
+    val runnableCalls = runnableScopes map { _.scope } collect { case c: Call => c.fullyQualifiedName }
     if (runnableCalls.nonEmpty) log.info(s"Starting calls: " + runnableCalls.mkString(", "))
 
     // Each process*** returns a Try[WorkflowExecutionDiff], which, upon success, contains potential changes to be made to the execution store.
@@ -296,7 +298,7 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
   private def processRunnableScatter(scatterKey: ScatterKey, data: WorkflowExecutionActorData): Try[WorkflowExecutionDiff] = {
     val lookup = data.hierarchicalLookup(scatterKey.scope, None) _
 
-    scatterKey.scope.collection.evaluate(lookup, CromwellWdlFunctions) map {
+    scatterKey.scope.collection.evaluate(lookup, data.expressionLanguageFunctions) map {
       case a: WdlArray => WorkflowExecutionDiff(scatterKey.populate(a.value.size) + (scatterKey -> ExecutionStatus.Done))
       case v: WdlValue => throw new Throwable("Scatter collection must evaluate to an array")
     }

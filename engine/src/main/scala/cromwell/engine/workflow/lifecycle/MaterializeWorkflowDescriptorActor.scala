@@ -13,6 +13,7 @@ import cromwell.engine.workflow.lifecycle.MaterializeWorkflowDescriptorActor.{Ma
 import lenthall.config.ScalaConfig.EnhancedScalaConfig
 import spray.json.{JsObject, _}
 import wdl4s._
+import wdl4s.expression.NoFunctions
 import wdl4s.values.{WdlString, WdlValue}
 
 import scala.language.postfixOps
@@ -192,7 +193,7 @@ class MaterializeWorkflowDescriptorActor() extends LoggingFSM[MaterializeWorkflo
   }
 
   private def evaluateBackendNameExpression(callName: String, backendNameAsExp: WdlExpression): String = {
-    backendNameAsExp.evaluate(NoLookup, CromwellWdlFunctions) match {
+    backendNameAsExp.evaluate(NoLookup, NoFunctions) match {
       case Success(runtimeString: WdlString) => runtimeString.valueString
       case Success(x: WdlValue) =>
         throw new Exception(s"Non-string values are not currently supported for backends! Cannot use backend '${x.valueString}' to backend to Call: $callName")
@@ -205,7 +206,7 @@ class MaterializeWorkflowDescriptorActor() extends LoggingFSM[MaterializeWorkflo
                                    options: WorkflowOptions,
                                    coercedInputs: WorkflowCoercedInputs): ErrorOr[WorkflowCoercedInputs] = {
     // TODO: Need to create engine-only engine functions!
-    namespace.staticWorkflowDeclarationsRecursive(coercedInputs, CromwellWdlFunctions) match {
+    namespace.staticWorkflowDeclarationsRecursive(coercedInputs, new EngineELF(options)) match {
       case Success(d) => d.successNel
       case Failure(e) => s"Workflow has invalid declarations: ${e.getMessage}".failureNel
     }

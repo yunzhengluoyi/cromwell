@@ -3,13 +3,16 @@ package cromwell.engine
 import java.nio.file.{FileSystem, FileSystems}
 
 import cromwell.backend.wdl.{PureFunctions, ReadLikeFunctions}
+import cromwell.core.WorkflowOptions
 import wdl4s.expression.WdlStandardLibraryFunctions
 import wdl4s.values.{WdlFile, WdlValue}
 
 import scala.util.{Failure, Try}
 
-object CromwellWdlFunctions extends WdlStandardLibraryFunctions with ReadLikeFunctions with PureFunctions {
+class EngineELF(workflowOptions: WorkflowOptions) extends WdlStandardLibraryFunctions with ReadLikeFunctions with PureFunctions {
 
+  // TODO: GCS
+  // TODO: Security fo shared FS
   /**
     * Ordered list of filesystems to be used to execute wdl functions needing IO.
     */

@@ -21,12 +21,13 @@ case class JobStarterActor(executionData: WorkflowExecutionActorData,
                            factory: BackendLifecycleActorFactory,
                            configDescriptor: BackendConfigurationDescriptor) extends Actor with InputEvaluation {
 
-  override def workflowDescriptor: EngineWorkflowDescriptor = executionData.workflowDescriptor
-  override def executionStore: ExecutionStore = executionData.executionStore
-  override def outputStore: OutputStore = executionData.outputStore
+  override val workflowDescriptor: EngineWorkflowDescriptor = executionData.workflowDescriptor
+  override val executionStore: ExecutionStore = executionData.executionStore
+  override val outputStore: OutputStore = executionData.outputStore
+  override val expressionLanguageFunctions = factory.expressionLanguageFunctions(workflowDescriptor.backendDescriptor, jobKey, configDescriptor)
 
   override def receive = {
-    case Start => resolveAndEvaluate(jobKey, factory.expressionLanguageFunctions(workflowDescriptor.backendDescriptor, jobKey, configDescriptor)) map { inputs =>
+    case Start => resolveAndEvaluate(jobKey, expressionLanguageFunctions) map { inputs =>
       val jobDescriptor = BackendJobDescriptor(workflowDescriptor.backendDescriptor, jobKey, inputs)
        val props = factory.jobExecutionActorProps(
           jobDescriptor,

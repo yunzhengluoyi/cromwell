@@ -2,9 +2,9 @@ package cromwell.engine.workflow.lifecycle.execution
 
 import cromwell.backend.BackendJobDescriptorKey
 import cromwell.engine.EngineWorkflowDescriptor
-import cromwell.util.TryUtil
 import wdl4s._
 import wdl4s.expression.WdlStandardLibraryFunctions
+import wdl4s.util.TryUtil
 import wdl4s.values.WdlValue
 
 import scala.util.{Success, Try}
@@ -16,11 +16,6 @@ trait InputEvaluation extends WdlLookup {
   // Split inputs map (= evaluated workflow declarations + coerced json inputs) into [init\.*].last
   private lazy val splitInputs = workflowDescriptor.backendDescriptor.inputs map {
     case (fqn, v) => splitFqn(fqn) -> v
-  }
-
-  // Unqualified workflow level inputs
-  override val unqualifiedWorkflowInputs: Map[LocallyQualifiedName, WdlValue] = splitInputs collect {
-    case((root, inputName), v) if root == workflowDescriptor.namespace.workflow.unqualifiedName => inputName -> v
   }
 
   /*
@@ -62,13 +57,6 @@ trait InputEvaluation extends WdlLookup {
 
     TryUtil.sequenceMap(inputEvaluationAttempt, s"Input evaluation for Call ${call.fullyQualifiedName} failed")
   }
-
-  private def splitFqn(fullyQualifiedName: FullyQualifiedName): (String, String) = {
-    val lastIndex = fullyQualifiedName.lastIndexOf(".")
-    (fullyQualifiedName.substring(0, lastIndex), fullyQualifiedName.substring(lastIndex + 1))
-  }
-
-
 
   // Unqualified call inputs for a specific call, from the input json
   private def unqualifiedInputsFromInputFile(call: Call): Map[LocallyQualifiedName, WdlValue] = splitInputs collect {

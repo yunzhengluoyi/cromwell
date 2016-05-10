@@ -4,7 +4,7 @@ import cromwell.backend.JobKey
 import cromwell.core._
 import cromwell.engine.ExecutionStatus._
 import cromwell.engine.workflow.lifecycle.execution.OutputStore.{OutputCallKey, OutputEntry}
-import cromwell.engine.{EngineWorkflowDescriptor, ExecutionStatus}
+import cromwell.engine.{EngineELF, EngineWorkflowDescriptor, ExecutionStatus}
 import cromwell.webservice.WdlValueJsonFormatter
 
 import scala.language.postfixOps
@@ -19,7 +19,9 @@ final case class WorkflowExecutionDiff(executionStore: Map[JobKey, ExecutionStat
 
 case class WorkflowExecutionActorData(workflowDescriptor: EngineWorkflowDescriptor,
                                       executionStore: ExecutionStore,
-                                      outputStore: OutputStore) extends InputEvaluation {
+                                      outputStore: OutputStore) extends WdlLookup {
+
+  override val expressionLanguageFunctions = new EngineELF(workflowDescriptor.backendDescriptor.workflowOptions)
 
   def jobExecutionSuccess(jobKey: JobKey,
                           outputs: CallOutputs) = this.copy(
@@ -38,7 +40,7 @@ case class WorkflowExecutionActorData(workflowDescriptor: EngineWorkflowDescript
 
   /** Checks if the workflow is completed by scanning through the executionStore */
   def isWorkflowComplete: Boolean = {
-    def isDone(executionStatus: ExecutionStatus): Boolean = executionStatus == ExecutionStatus.Done
+    def isDone(executionStatus: ExecutionStatus): Boolean = executionStatus == Done || executionStatus == Preempted
     executionStore.store.values.forall(isDone)
   }
 

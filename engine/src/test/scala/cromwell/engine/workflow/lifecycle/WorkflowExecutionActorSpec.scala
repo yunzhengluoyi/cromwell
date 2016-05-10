@@ -5,7 +5,8 @@ import com.typesafe.config.ConfigFactory
 import cromwell.CromwellTestkitSpec
 import cromwell.core.WorkflowId
 import cromwell.engine.backend.{BackendConfigurationEntry, CromwellBackends, WorkflowDescriptorBuilder}
-import cromwell.engine.workflow.lifecycle.WorkflowExecutionActor.StartExecutingWorkflowCommand
+import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActor
+import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActor.StartExecutingWorkflowCommand
 import cromwell.util.SampleWdl
 import org.scalatest.BeforeAndAfter
 
