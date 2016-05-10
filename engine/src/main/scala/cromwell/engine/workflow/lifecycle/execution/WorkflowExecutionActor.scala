@@ -187,9 +187,6 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
       goto(WorkflowExecutionFailedState)
     case Event(ScatterCollectionSucceededResponse(jobKey, callOutputs), stateData) =>
       handleCallSuccessful(jobKey, callOutputs, stateData)
-    case Event(BackendJobExecutionFailedResponse(jobKey, reason), stateData) =>
-      log.warning(s"Job ${jobKey.tag} failed: $reason")
-      goto(WorkflowExecutionFailedState)
     case Event(AbortExecutingWorkflowCommand, stateData) => ??? // TODO: Implement!
     case Event(_, _) => ??? // TODO: Lots of extra stuff to include here...
   }
