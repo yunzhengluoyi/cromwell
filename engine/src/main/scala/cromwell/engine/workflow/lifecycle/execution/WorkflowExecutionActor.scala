@@ -119,7 +119,7 @@ final case class WorkflowExecutionActor(workflowId: WorkflowId, workflowDescript
       log.warning(s"Failed to load the max-retries value from the configuration. Defaulting back to a value of `$DefaultMaxRetriesFallbackValue`.")
       DefaultMaxRetriesFallbackValue
   }
-  private val workflow = workflowDescriptor.backendDescriptor.workflowNamespace.workflow
+
   private val factories = TryUtil.sequenceMap(workflowDescriptor.backendAssignments.values.toSeq map { backendName =>
     backendName -> CromwellBackends.shadowBackendLifecycleFactory(backendName)
   } toMap) recover {

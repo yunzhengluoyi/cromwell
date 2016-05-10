@@ -26,7 +26,7 @@ case class JobStarterActor(executionData: WorkflowExecutionActorData,
   override def outputStore: OutputStore = executionData.outputStore
 
   override def receive = {
-    case Start => resolveAndEvaluate(jobKey, factory.engineFunctions(workflowDescriptor.backendDescriptor, jobKey, configDescriptor)) map { inputs =>
+    case Start => resolveAndEvaluate(jobKey, factory.expressionLanguageFunctions(workflowDescriptor.backendDescriptor, jobKey, configDescriptor)) map { inputs =>
       val jobDescriptor = BackendJobDescriptor(workflowDescriptor.backendDescriptor, jobKey, inputs)
        val props = factory.jobExecutionActorProps(
           jobDescriptor,
