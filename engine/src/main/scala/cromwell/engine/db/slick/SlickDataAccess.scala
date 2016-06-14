@@ -36,6 +36,7 @@ object SlickDataAccess {
   val IoOutput = "OUTPUT"
 
   lazy val rootConfig = ConfigFactory.load()
+  private lazy val compressionThreshold = rootConfig.getIntOption("compressionThreshold")
   private lazy val rootDatabaseConfig = rootConfig.getConfig("database")
   private lazy val databaseConfigName = rootDatabaseConfig.getStringOption("config")
   lazy val defaultDatabaseConfig = databaseConfigName.map(getDatabaseConfig).getOrElse(rootDatabaseConfig)
@@ -145,15 +146,37 @@ class SlickDataAccess(databaseConfig: Config) extends DataAccess {
     }
   }
 
-  private def wdlValueToDbValue(v: WdlValue): String = v.wdlType match {
-    case p: WdlPrimitiveType => v.valueString
-    case o => v.toWdlString
+  private def wdlValueToDbValue(v: WdlValue): String = {
+    import cromwell.util.StringUtil._
+
+    def deflate(str: String) = str.deflate recover {
+      case e =>
+        log.error(s"Failed to deflate value $v before insert to Database. Inserting raw value instead.", e)
+        str
+    } get
+
+    v.wdlType match {
+      case p: WdlPrimitiveType => deflate(v.valueString)
+      case o => deflate(v.toWdlString)
+    }
   }
 
-  private def dbEntryToWdlValue(dbValue: String, wdlType: WdlType): WdlValue = wdlType match {
-    // .get here is because we trust the value in the database is coercible to the given type
-    case p: WdlPrimitiveType => p.coerceRawValue(dbValue).get
-    case o => wdlType.fromWdlString(dbValue)
+  private def dbEntryToWdlValue(dbValue: String, wdlType: WdlType): WdlValue = {
+    import cromwell.util.StringUtil._
+
+    def inflate(str: String) = {
+      str.inflate recover {
+        case e =>
+          log.error(s"Failed to inflate value $dbValue returned from the Database. Using raw value instead.", e)
+          str
+      } get
+    }
+
+    wdlType match {
+      // .get here is because we trust the value in the database is coercible to the given type
+      case p: WdlPrimitiveType => p.coerceRawValue(inflate(dbValue)).get
+      case o => wdlType.fromWdlString(inflate(dbValue))
+    }
   }
 
   /**
