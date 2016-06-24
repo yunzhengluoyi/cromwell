@@ -71,7 +71,6 @@ object Run  {
       val logging = new LoggingOptions()
       logging.setGcsPath(s"$gcsPath/${JesBackend.jesLogFilename(key)}")
       rpargs.setLogging(logging)
-      logger.info("JOSE LOOK HERE -> " + rpr.toPrettyString)
       val runId = genomicsInterface.pipelines().run(rpr).setDisableGZipContent(true).execute().getName
       logger.info(s"JES Run ID is $runId")
       runId
