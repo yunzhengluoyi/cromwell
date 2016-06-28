@@ -4,7 +4,6 @@ import java.nio.file.Path
 
 import akka.actor.Props
 import better.files._
-import cromwell.backend.impl.jes.io._
 import cromwell.backend.{BackendJobDescriptorKey, BackendWorkflowDescriptor, BackendWorkflowFinalizationActor}
 import cromwell.core.{ExecutionStore, OutputStore, PathCopier}
 import wdl4s.Call

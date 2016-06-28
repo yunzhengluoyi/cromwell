@@ -201,10 +201,8 @@ class WorkflowActor(val workflowId: WorkflowId,
       executionActor ! commandToSend
       goto(ExecutingWorkflowState) using data.copy(currentLifecycleStateActor = Option(executionActor), initializationData = initializationData)
     case Event(WorkflowInitializationFailedResponse(reason), data @ WorkflowActorData(_, Some(workflowDescriptor), _, _)) =>
-      val failureEvent = MetadataEvent(
-        MetadataKey(workflowId, None, s"${WorkflowMetadataKeys.Failures}[${Random.nextInt(Int.MaxValue)}]"),
-        MetadataValue(reason.map(_.getMessage).mkString(". ")))
-      serviceRegistryActor ! PutMetadataAction(failureEvent)
+      val failureEvents = reason flatMap { r => throwableToMetadataEvents(MetadataKey(workflowId, None, s"${WorkflowMetadataKeys.Failures}[${Random.nextInt(Int.MaxValue)}]"), r) }
+      serviceRegistryActor ! PutMetadataAction(failureEvents)
       finalizeWorkflow(data, workflowDescriptor, ExecutionStore.empty, OutputStore.empty, Option(reason.toList))
   }
 
