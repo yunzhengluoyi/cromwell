@@ -1,7 +1,7 @@
 package cromwell.engine.workflow.lifecycle
 
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
-import akka.actor.{ActorInitializationException, ActorRef, LoggingFSM, OneForOneStrategy, _}
+import akka.actor.{ActorInitializationException, ActorRef, LoggingFSM, _}
 import cromwell.backend.BackendInitializationData
 import cromwell.core.logging.WorkflowLogging
 import cromwell.engine.workflow.lifecycle.WorkflowLifecycleActor._
@@ -69,9 +69,10 @@ trait WorkflowLifecycleActor[S <: WorkflowLifecycleActorState] extends LoggingFS
   def successResponse(data: WorkflowLifecycleActorData): WorkflowLifecycleSuccessResponse
   def failureResponse(reasons: Seq[Throwable]): WorkflowLifecycleFailureResponse
 
-  override def supervisorStrategy = OneForOneStrategy() {
+  override def supervisorStrategy = AllForOneStrategy() {
     case ex: ActorInitializationException =>
       context.parent ! failureResponse(Seq(ex))
+      context.stop(self)
       Stop
     case t => super.supervisorStrategy.decider.applyOrElse(t, (_: Any) => Escalate)
   }
