@@ -14,7 +14,8 @@ import cromwell.core.{WorkflowId, _}
 import cromwell.database.obj.WorkflowMetadataKeys
 import cromwell.engine._
 import cromwell.engine.backend.BackendConfigurationEntry
-import cromwell.engine.workflow.WorkflowManagerActor
+import cromwell.engine.workflow.{WorkflowManagerActor, WorkflowStore, WorkflowStoreActor}
+import cromwell.engine.workflow.WorkflowStore.{Submitted, WorkflowToStart}
 import cromwell.server.WorkflowManagerSystem
 import cromwell.services.MetadataQuery
 import cromwell.services.MetadataServiceActor._
@@ -176,7 +177,8 @@ object CromwellTestkitSpec {
   implicit class EnhancedWorkflowManagerActor(val manager: TestActorRef[WorkflowManagerActor]) extends AnyVal {
 
     def submit(sources: WorkflowSourceFiles): WorkflowId = {
-      val submitMessage = WorkflowManagerActor.SubmitWorkflowCommand(sources)
+      val newWorkflow = WorkflowToStart(WorkflowId(UUID.randomUUID()), sources, Submitted)
+      val submitMessage = WorkflowStoreActor.NewWorkflows(List(newWorkflow))
       Await.result(manager.ask(submitMessage)(TimeoutDuration), Duration.Inf).asInstanceOf[WorkflowManagerSubmitSuccess].id
     }
   }
@@ -339,7 +341,8 @@ abstract class CromwellTestkitSpec extends TestKit(new CromwellTestkitSpec.TestW
   }
 
   private def buildWorkflowManagerActor(config: Config) = {
-    TestActorRef(new WorkflowManagerActor(config), name = "WorkflowManagerActor")
+    val workflowStore = system.actorOf(WorkflowStoreActor.props())
+    TestActorRef(new WorkflowManagerActor(config, workflowStore), name = "WorkflowManagerActor")
   }
 
   def workflowSuccessFilter = EventFilter.info(pattern = "transition from FinalizingWorkflowState to WorkflowSucceededState", occurrences = 1)

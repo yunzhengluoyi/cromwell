@@ -1,20 +1,17 @@
 package cromwell.engine.workflow
 
-import java.time.OffsetDateTime
-
 import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition}
 import akka.actor._
 import akka.event.Logging
 import akka.routing.FromConfig
 import com.typesafe.config.{Config, ConfigFactory}
-import cromwell.core.{WorkflowId, WorkflowSourceFiles}
-import cromwell.database.obj.WorkflowMetadataKeys
+import cromwell.core.WorkflowId
 import cromwell.engine._
 import cromwell.engine.workflow.WorkflowActor._
 import cromwell.engine.workflow.WorkflowManagerActor._
 import cromwell.engine.workflow.lifecycle.CopyWorkflowLogsActor
 import cromwell.services.MetadataServiceActor._
-import cromwell.services.{MetadataEvent, MetadataKey, MetadataValue, ServiceRegistryClient}
+import cromwell.services.ServiceRegistryClient
 import cromwell.webservice.CromwellApiHandler._
 import lenthall.config.ScalaConfig.EnhancedScalaConfig
 
@@ -23,6 +20,8 @@ import scala.concurrent.{Await, Promise}
 import scala.language.postfixOps
 
 object WorkflowManagerActor {
+  val DefaultMaxWorkflowsToLaunch = 50
+  val DefaultNewWorkflowPollRate = 20
 
   case class WorkflowIdToActorRef(workflowId: WorkflowId, workflowActor: ActorRef)
   class WorkflowNotFoundException(s: String) extends Exception(s)
@@ -32,8 +31,7 @@ object WorkflowManagerActor {
     * Commands
     */
   sealed trait WorkflowManagerActorCommand extends WorkflowManagerActorMessage
-
-  case class SubmitWorkflowCommand(source: WorkflowSourceFiles) extends WorkflowManagerActorCommand
+  case object RetrieveNewWorkflows extends WorkflowManagerActorCommand
   case class AbortWorkflowCommand(id: WorkflowId) extends WorkflowManagerActorCommand
   case object AbortAllWorkflowsCommand extends WorkflowManagerActorCommand
   case class SubscribeToWorkflowCommand(id: WorkflowId) extends WorkflowManagerActorCommand
@@ -43,7 +41,7 @@ object WorkflowManagerActor {
     */
   sealed trait WorkflowManagerActorResponse extends WorkflowManagerActorMessage
 
-  def props(): Props = Props(new WorkflowManagerActor())
+  def props(workflowStore: ActorRef): Props = Props(new WorkflowManagerActor(workflowStore))
 
   /**
     * States
@@ -57,12 +55,16 @@ object WorkflowManagerActor {
     * Data
     */
   case class WorkflowManagerData(workflows: Map[WorkflowId, ActorRef]) {
-    def idFromActor(actor: ActorRef): Option[WorkflowId] =
-      workflows.collectFirst { case (id, a) if a == actor => id }
+    def idFromActor(actor: ActorRef): Option[WorkflowId] = workflows.collectFirst { case (id, a) if a == actor => id }
     def withAddition(entry: WorkflowIdToActorRef): WorkflowManagerData =
       this.copy(workflows = workflows + (entry.workflowId -> entry.workflowActor))
-    def without(id: WorkflowId): WorkflowManagerData =
-      this.copy(workflows = workflows - id)
+
+    def withAddition(entries: List[WorkflowIdToActorRef]): WorkflowManagerData = {
+      val entryTuples = entries map { e => e.workflowId -> e.workflowActor }
+      this.copy(workflows = workflows ++ entryTuples)
+    }
+
+    def without(id: WorkflowId): WorkflowManagerData = this.copy(workflows = workflows - id)
     def without(actor: ActorRef): WorkflowManagerData = {
       // If the ID was found in the lookup return a modified copy of the state data, otherwise just return
       // the same state data.
@@ -71,12 +73,16 @@ object WorkflowManagerActor {
   }
 }
 
-class WorkflowManagerActor(config: Config)
+class WorkflowManagerActor(config: Config, workflowStore: ActorRef)
   extends LoggingFSM[WorkflowManagerState, WorkflowManagerData] with CromwellActor with ServiceRegistryClient {
 
-  def this() = this(ConfigFactory.load)
+  def this(workflowStore: ActorRef) = this(ConfigFactory.load, workflowStore)
   implicit val actorSystem = context.system
 
+  private val maxWorkflowsToLaunch = config.getConfig("system").getIntOr("max-workflows-to-launch", default=DefaultMaxWorkflowsToLaunch)
+  private val newWorkflowPollRate = config.getConfig("system").getIntOr("new-workflow-poll-rate", default=DefaultNewWorkflowPollRate).seconds
+
+  private val restartDelay: FiniteDuration = 200 milliseconds
   private val logger = Logging(context.system, this)
   private val tag = self.path.name
 
@@ -88,8 +94,8 @@ class WorkflowManagerActor(config: Config)
 
   override def preStart() {
     addShutdownHook()
-    // PBE turn this off it tries to do a bunch of Olde stuffe that is badley brokeene
-    // restartIncompleteWorkflows()
+    // Starts the workflow polling cycle
+    self ! RetrieveNewWorkflows
   }
 
   private def addShutdownHook(): Unit = {
@@ -112,9 +118,14 @@ class WorkflowManagerActor(config: Config)
     /*
      Commands from clients
      */
-    case Event(SubmitWorkflowCommand(source), stateData) =>
-      val updatedEntry = submitWorkflow(source, replyTo = Option(sender), id = None)
-      stay() using stateData.withAddition(updatedEntry)
+    case Event(RetrieveNewWorkflows, stateData) =>
+      workflowStore ! WorkflowStoreActor.FetchRunnableWorkflows(maxWorkflowsToLaunch)
+      stay()
+    case Event(WorkflowStoreActor.NewWorkflows(newWorkflows), stateData) =>
+      val newSubmissions = newWorkflows map submitWorkflow
+      log.debug(s"Retrieved ${newSubmissions.size} workflows from the WorkflowStoreActor")
+      context.system.scheduler.scheduleOnce(newWorkflowPollRate, self, RetrieveNewWorkflows)(context.dispatcher)
+      stay() using stateData.withAddition(newSubmissions)
     case Event(SubscribeToWorkflowCommand(id), data) =>
       data.workflows.get(id) foreach {_ ! SubscribeTransitionCallBack(sender())}
       stay()
@@ -148,6 +159,8 @@ class WorkflowManagerActor(config: Config)
      */
     case Event(Transition(workflowActor, _, toState: WorkflowActorTerminalState), data) =>
       log.info(s"$tag ${workflowActor.path.name} is in a terminal state: $toState")
+      // This silently fails if idFromActor is None, but data.without call right below will as well
+      data.idFromActor(workflowActor) foreach { workflowStore ! WorkflowStoreActor.RemoveWorkflow(_) }
       stay using data.without(workflowActor)
   }
 
@@ -191,14 +204,14 @@ class WorkflowManagerActor(config: Config)
       logger.info(s"$tag transitioning from $fromState to $toState")
   }
 
-  /** Submit the workflow and return an updated copy of the state data reflecting the addition of a
+  /**
+    * Submit the workflow and return an updated copy of the state data reflecting the addition of a
     * Workflow ID -> WorkflowActorRef entry.
     */
-  private def submitWorkflow(source: WorkflowSourceFiles, replyTo: Option[ActorRef], id: Option[WorkflowId]): WorkflowIdToActorRef = {
-    val workflowId: WorkflowId = id.getOrElse(WorkflowId.randomId())
-    val isRestart = id.isDefined
+  private def submitWorkflow(workflow: WorkflowStore.WorkflowToStart): WorkflowIdToActorRef = {
+    val workflowId = workflow.id
 
-    val startMode = if (isRestart) {
+    val startMode = if (workflow.state == WorkflowStore.Restartable) {
       logger.info(s"$tag Restarting workflow UUID($workflowId)")
       RestartExistingWorkflow
     } else {
@@ -206,17 +219,9 @@ class WorkflowManagerActor(config: Config)
       StartNewWorkflow
     }
 
-    val wfActor = context.actorOf(WorkflowActor.props(workflowId, startMode, source, config, serviceRegistryActor, workflowLogCopyRouter), name = s"WorkflowActor-$workflowId")
+    val wfProps = WorkflowActor.props(workflowId, startMode, workflow.sources, config, serviceRegistryActor, workflowLogCopyRouter)
+    val wfActor = context.actorOf(wfProps, name = s"WorkflowActor-$workflowId")
 
-    // We have a valid workflowId for the workflow, send it over to the metadata service with default empty values for inputs/outputs
-    val submissionEvents = List(
-      MetadataEvent(MetadataKey(workflowId, None, WorkflowMetadataKeys.SubmissionTime), MetadataValue(OffsetDateTime.now.toString)),
-      MetadataEvent.empty(MetadataKey(workflowId, None, WorkflowMetadataKeys.Inputs)),
-      MetadataEvent.empty(MetadataKey(workflowId, None, WorkflowMetadataKeys.Outputs))
-    )
-    serviceRegistryActor ! PutMetadataAction(submissionEvents)
-
-    replyTo.foreach { _ ! WorkflowManagerSubmitSuccess(id = workflowId) }
     wfActor ! SubscribeTransitionCallBack(self)
     wfActor ! StartWorkflowCommand
     logger.info(s"$tag Successfully started ${wfActor.path.name}")

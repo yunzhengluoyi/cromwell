@@ -9,7 +9,8 @@ import cromwell.CromwellSpec.PostMVP
 import cromwell.core.WorkflowId
 import cromwell.database.obj.WorkflowMetadataKeys
 import cromwell.engine.workflow.WorkflowDescriptorBuilder
-import cromwell.engine.workflow.WorkflowManagerActor.{AbortWorkflowCommand, SubmitWorkflowCommand, WorkflowNotFoundException}
+import cromwell.engine.workflow.WorkflowManagerActor.{AbortWorkflowCommand, WorkflowNotFoundException}
+import cromwell.engine.workflow.WorkflowStoreActor.{SubmitWorkflow, SubmitWorkflows, WorkflowAdded, WorkflowsAdded}
 import cromwell.server.WorkflowManagerSystem
 import cromwell.services.MetadataServiceActor._
 import cromwell.services.MetadataSummaryRefreshActor.{MetadataSummarySuccess, SummarizeMetadata}
@@ -23,21 +24,30 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 import spray.testkit.ScalatestRouteTest
 
+object MockWorkflowStoreActor {
+  val submittedWorkflowId = WorkflowId(UUID.randomUUID())
+}
+
+class MockWorkflowStoreActor extends Actor {
+  import MockWorkflowStoreActor.submittedWorkflowId
+
+  override def receive = {
+    case SubmitWorkflow(source) => sender ! WorkflowAdded(submittedWorkflowId)
+    case SubmitWorkflows(sources) =>
+      val response = WorkflowsAdded(sources.toList map {_ => submittedWorkflowId })
+      sender ! response
+  }
+}
+
 object MockWorkflowManagerActor {
   val runningWorkflowId = WorkflowId(UUID.randomUUID())
   val unknownId = WorkflowId(UUID.randomUUID())
-  val submittedWorkflowId = WorkflowId(UUID.randomUUID())
   val submittedScatterWorkflowId = WorkflowId(UUID.randomUUID())
   val abortedWorkflowId = WorkflowId(UUID.randomUUID())
 }
 
 class MockWorkflowManagerActor extends Actor {
-
   def receive = {
-    case SubmitWorkflowCommand(source) =>
-      val id = MockWorkflowManagerActor.submittedWorkflowId
-      val message = WorkflowManagerSubmitSuccess(id)
-      sender ! message
     case AbortWorkflowCommand(id) =>
       val message = id match {
         case MockWorkflowManagerActor.runningWorkflowId => WorkflowManagerAbortSuccess(id)
@@ -71,6 +81,9 @@ class CromwellApiServiceSpec extends FlatSpec with CromwellApiService with Scala
   override val workflowManager = actorRefFactory.actorOf(Props(new MockWorkflowManagerActor() with WorkflowDescriptorBuilder {
     override implicit  val actorSystem = context.system
   }))
+
+  override val workflowStoreActor = actorRefFactory.actorOf(Props(new MockWorkflowStoreActor()))
+
   val version = "v1"
 
   def publishMetadata(events: Seq[MetadataEvent]): Unit = {
@@ -220,14 +233,13 @@ class CromwellApiServiceSpec extends FlatSpec with CromwellApiService with Scala
   }
 
   behavior of "REST API submission endpoint"
-
   it should "return 201 for a successful workflow submission " in {
     Post("/workflows/$version", FormData(Seq("wdlSource" -> HelloWorld.wdlSource(), "workflowInputs" -> HelloWorld.rawInputs.toJson.toString()))) ~>
       submitRoute ~>
       check {
         assertResult(
           s"""{
-              |  "id": "${MockWorkflowManagerActor.submittedWorkflowId.toString}",
+              |  "id": "${MockWorkflowStoreActor.submittedWorkflowId.toString}",
               |  "status": "Submitted"
               |}""".stripMargin) {
           responseAs[String]
@@ -239,7 +251,7 @@ class CromwellApiServiceSpec extends FlatSpec with CromwellApiService with Scala
   }
 
   behavior of "REST API batch submission endpoint"
-
+  // FIXME and here too
   it should "return 200 for a successful workflow submission " in {
     val inputs = HelloWorld.rawInputs.toJson
 
@@ -249,10 +261,10 @@ class CromwellApiServiceSpec extends FlatSpec with CromwellApiService with Scala
       check {
         assertResult(
           s"""[{
-              |  "id": "${MockWorkflowManagerActor.submittedWorkflowId.toString}",
+              |  "id": "${MockWorkflowStoreActor.submittedWorkflowId.toString}",
               |  "status": "Submitted"
               |}, {
-              |  "id": "${MockWorkflowManagerActor.submittedWorkflowId.toString}",
+              |  "id": "${MockWorkflowStoreActor.submittedWorkflowId.toString}",
               |  "status": "Submitted"
               |}]""".stripMargin) {
           responseAs[String]
@@ -296,7 +308,7 @@ class CromwellApiServiceSpec extends FlatSpec with CromwellApiService with Scala
   }
 
   it should "return 405 with POST of outputs on successful execution of workflow" in {
-    Post(s"/workflows/$version/${MockWorkflowManagerActor.submittedWorkflowId.toString}/outputs") ~>
+    Post(s"/workflows/$version/${MockWorkflowStoreActor.submittedWorkflowId.toString}/outputs") ~>
       sealRoute(workflowOutputsRoute) ~>
       check {
         assertResult(StatusCodes.MethodNotAllowed) {
@@ -438,7 +450,7 @@ class CromwellApiServiceSpec extends FlatSpec with CromwellApiService with Scala
   behavior of "REST API /timing endpoint"
 
   it should "return 200 with an HTML document for the timings route" in {
-    Get(s"/workflows/$version/${MockWorkflowManagerActor.submittedWorkflowId}/timing") ~>
+    Get(s"/workflows/$version/${MockWorkflowStoreActor.submittedWorkflowId}/timing") ~>
       timingRoute ~>
       check {
         assertResult(StatusCodes.OK) { status }
