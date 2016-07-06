@@ -39,6 +39,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
+import scalaz.NonEmptyList
 
 case class TestBackendLifecycleActorFactory(configurationDescriptor: BackendConfigurationDescriptor) extends BackendLifecycleActorFactory {
   override def workflowInitializationActorProps(workflowDescriptor: BackendWorkflowDescriptor,
@@ -178,7 +179,7 @@ object CromwellTestkitSpec {
 
     def submit(sources: WorkflowSourceFiles): WorkflowId = {
       val newWorkflow = WorkflowToStart(WorkflowId.randomId(), sources, Submitted)
-      val submitMessage = WorkflowStoreActor.NewWorkflowsToStart(List(newWorkflow))
+      val submitMessage = WorkflowStoreActor.NewWorkflowsToStart(NonEmptyList(newWorkflow))
       Await.result(manager.ask(submitMessage)(TimeoutDuration), Duration.Inf).asInstanceOf[WorkflowManagerSubmitSuccess].id
     }
   }
