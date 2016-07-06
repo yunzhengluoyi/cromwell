@@ -106,11 +106,11 @@ class WorkflowStoreActor extends WorkflowStore with Actor with ServiceRegistryCl
     case SubmitWorkflow(source) =>
       val id = add(source)
       sendIdToMetadataService(id)
-      sender ! WorkflowAdded(id)
+      sender ! WorkflowSubmitted(id)
     case SubmitWorkflows(sources) =>
       val ids = add(sources)
       ids foreach sendIdToMetadataService
-      sender ! WorkflowsAdded(ids)
+      sender ! WorkflowsSubmitted(ids)
     case FetchRunnableWorkflows(n) => sender ! NewWorkflows(fetchRunnableWorkflows(n))
     case RemoveWorkflow(id) => remove(id)
   }
@@ -137,8 +137,8 @@ object WorkflowStoreActor {
   case class RemoveWorkflow(id: WorkflowId) extends WorkflowStoreActorCommand
 
   sealed trait WorkflowStoreActorResponse
-  case class WorkflowAdded(workflowId: WorkflowId) extends WorkflowStoreActorResponse
-  case class WorkflowsAdded(workflowIds: List[WorkflowId]) extends WorkflowStoreActorResponse
+  case class WorkflowSubmitted(workflowId: WorkflowId) extends WorkflowStoreActorResponse
+  case class WorkflowsSubmitted(workflowIds: List[WorkflowId]) extends WorkflowStoreActorResponse
   case class NewWorkflows(workflows: immutable.List[WorkflowToStart]) extends WorkflowStoreActorResponse
 
   def props() = Props(new WorkflowStoreActor)

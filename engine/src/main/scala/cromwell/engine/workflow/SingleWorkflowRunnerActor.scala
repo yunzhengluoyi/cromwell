@@ -116,7 +116,7 @@ case class SingleWorkflowRunnerActor(source: WorkflowSourceFiles,
   }
 
   when (RunningWorkflow) {
-    case Event(WorkflowStoreActor.WorkflowAdded(id), data) =>
+    case Event(WorkflowStoreActor.WorkflowSubmitted(id), data) =>
       log.info(s"$Tag: Workflow submitted UUID($id)")
       // Since we only have a single workflow, force the WorkflowManagerActor's hand in case the polling rate is long
       workflowManager ! RetrieveNewWorkflows

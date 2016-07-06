@@ -10,7 +10,7 @@ import cromwell.core.WorkflowId
 import cromwell.database.obj.WorkflowMetadataKeys
 import cromwell.engine.workflow.WorkflowDescriptorBuilder
 import cromwell.engine.workflow.WorkflowManagerActor.{AbortWorkflowCommand, WorkflowNotFoundException}
-import cromwell.engine.workflow.WorkflowStoreActor.{SubmitWorkflow, SubmitWorkflows, WorkflowAdded, WorkflowsAdded}
+import cromwell.engine.workflow.WorkflowStoreActor.{SubmitWorkflow, SubmitWorkflows, WorkflowSubmitted, WorkflowsSubmitted}
 import cromwell.server.WorkflowManagerSystem
 import cromwell.services.MetadataServiceActor._
 import cromwell.services.MetadataSummaryRefreshActor.{MetadataSummarySuccess, SummarizeMetadata}
@@ -32,9 +32,9 @@ class MockWorkflowStoreActor extends Actor {
   import MockWorkflowStoreActor.submittedWorkflowId
 
   override def receive = {
-    case SubmitWorkflow(source) => sender ! WorkflowAdded(submittedWorkflowId)
+    case SubmitWorkflow(source) => sender ! WorkflowSubmitted(submittedWorkflowId)
     case SubmitWorkflows(sources) =>
-      val response = WorkflowsAdded(sources.toList map {_ => submittedWorkflowId })
+      val response = WorkflowsSubmitted(sources.toList map { _ => submittedWorkflowId })
       sender ! response
   }
 }
