@@ -23,15 +23,15 @@ class WorkflowStoreSpec extends FlatSpec with Matchers with WorkflowStore {
     val origIds = dump.keySet
     val newIds = fetchRunnableWorkflows(1) map { _.id }
     newIds should have size 1
-    val currentIds = dump.filter({ case (k, v) => v.state.isStartable }).keySet
+    val currentIds = dump.filter({ case (_, v) => v.state.isStartable }).keySet
     currentIds should be (origIds -- newIds)
   }
 
   it should "return only the remaining workflows if N is larger than size" in {
-    val origIds = dump.filter({ case (k, v) => v.state.isStartable }).keySet
+    val origIds = dump.filter({ case (_, v) => v.state.isStartable }).keySet
     val newIds = fetchRunnableWorkflows(origIds.size + 5) map { _.id }
     newIds should have size origIds.size
-    val currentIds = dump.filter({ case (k, v) => v.state.isStartable }).keySet
+    val currentIds = dump.filter({ case (_, v) => v.state.isStartable }).keySet
     currentIds shouldBe empty
   }
 

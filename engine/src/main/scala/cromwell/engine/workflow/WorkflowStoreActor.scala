@@ -62,7 +62,7 @@ trait WorkflowStore {
     * Adds a WorkflowSourceFiles to the store and returns a WorkflowId for tracking purposes
     */
   def add(source: WorkflowSourceFiles): WorkflowId = {
-    val workflowId = WorkflowId(UUID.randomUUID())
+    val workflowId = WorkflowId.randomId()
     workflowStore += (workflowId -> SubmittedWorkflow(source, Submitted))
     workflowId
   }
@@ -110,13 +110,13 @@ class WorkflowStoreActor extends WorkflowStore with Actor with ServiceRegistryCl
     case SubmitWorkflows(sources) =>
       val ids = add(sources)
       ids foreach sendIdToMetadataService
-      sender ! WorkflowsAdded(add(sources))
+      sender ! WorkflowsAdded(ids)
     case FetchRunnableWorkflows(n) => sender ! NewWorkflows(fetchRunnableWorkflows(n))
     case RemoveWorkflow(id) => remove(id)
   }
 
   /**
-    * Takes the workflow id and sends it over to the metadata service w// default empty values for inputs/outputs
+    * Takes the workflow id and sends it over to the metadata service w/ default empty values for inputs/outputs
     */
   private def sendIdToMetadataService(id: WorkflowId): Unit = {
     val submissionEvents = List(
