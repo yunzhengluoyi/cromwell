@@ -15,6 +15,7 @@ import spray.httpx.SprayJsonSupport._
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scalaz.NonEmptyList
 
 object CromwellApiHandler {
   def props(requestHandlerActor: ActorRef): Props = {
@@ -24,7 +25,7 @@ object CromwellApiHandler {
   sealed trait ApiHandlerMessage
 
   final case class ApiHandlerWorkflowSubmit(source: WorkflowSourceFiles) extends ApiHandlerMessage
-  final case class ApiHandlerWorkflowSubmitBatch(sources: Seq[WorkflowSourceFiles]) extends ApiHandlerMessage
+  final case class ApiHandlerWorkflowSubmitBatch(sources: NonEmptyList[WorkflowSourceFiles]) extends ApiHandlerMessage
   final case class ApiHandlerWorkflowQuery(uri: Uri, parameters: Seq[(String, String)]) extends ApiHandlerMessage
   final case class ApiHandlerWorkflowStatus(id: WorkflowId) extends ApiHandlerMessage
   final case class ApiHandlerWorkflowOutputs(id: WorkflowId) extends ApiHandlerMessage
@@ -93,9 +94,9 @@ class CromwellApiHandler(requestHandlerActor: ActorRef) extends Actor with Workf
     case WorkflowStoreActor.WorkflowSubmitted(id) =>
       context.parent ! RequestComplete(StatusCodes.Created, WorkflowSubmitResponse(id.toString, WorkflowSubmitted.toString))
 
-    case ApiHandlerWorkflowSubmitBatch(sources) => requestHandlerActor ! WorkflowStoreActor.SubmitWorkflows(sources)
+    case ApiHandlerWorkflowSubmitBatch(sources) => requestHandlerActor ! WorkflowStoreActor.BatchSubmitWorkflows(sources)
 
-    case WorkflowStoreActor.WorkflowsSubmitted(ids) =>
+    case WorkflowStoreActor.WorkflowsBatchSubmitted(ids) =>
       val responses = ids map { id => WorkflowSubmitResponse(id.toString, WorkflowSubmitted.toString) }
       context.parent ! RequestComplete(StatusCodes.OK, responses)
   }

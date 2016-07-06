@@ -18,6 +18,7 @@ import spray.routing._
 import spray.httpx.SprayJsonSupport._
 
 import scala.util.{Failure, Success, Try}
+import scalaz.NonEmptyList
 
 trait SwaggerService extends SwaggerUiResourceHttpService {
   override def swaggerServiceName = "cromwell"
@@ -120,9 +121,11 @@ trait CromwellApiService extends HttpService with PerRequestCreator with Service
             requestContext =>
               import spray.json._
               workflowInputs.parseJson match {
-                case JsArray(inputses) =>
-                  val sources = inputses.map(inputs => WorkflowSourceFiles(wdlSource, inputs.compactPrint, workflowOptions.getOrElse("{}")))
+                case JsArray(Seq(x, xs@_*)) =>
+                  val nelInputses = NonEmptyList.nel(x, xs.toList)
+                  val sources = nelInputses.map(inputs => WorkflowSourceFiles(wdlSource, inputs.compactPrint, workflowOptions.getOrElse("{}")))
                   perRequest(requestContext, CromwellApiHandler.props(workflowStoreActor), CromwellApiHandler.ApiHandlerWorkflowSubmitBatch(sources))
+                case JsArray(_) => failBadRequest(new RuntimeException("Nothing was submitted"))
                 case _ => reject
               }
         }

@@ -13,7 +13,7 @@ import cromwell.engine._
 import cromwell.engine.workflow.SingleWorkflowRunnerActor._
 import cromwell.engine.workflow.WorkflowManagerActor.RetrieveNewWorkflows
 import cromwell.engine.workflow.WorkflowStore.{Submitted, WorkflowToStart}
-import cromwell.engine.workflow.WorkflowStoreActor.{NewWorkflows, SubmitWorkflow}
+import cromwell.engine.workflow.WorkflowStoreActor.{NewWorkflowsToStart, SubmitWorkflow}
 import cromwell.services.MetadataServiceActor.{GetSingleWorkflowMetadataAction, GetStatus, WorkflowOutputs}
 import cromwell.services.ServiceRegistryClient
 import cromwell.util.PromiseActor._

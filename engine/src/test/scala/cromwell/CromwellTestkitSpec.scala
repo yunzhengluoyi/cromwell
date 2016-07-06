@@ -178,7 +178,7 @@ object CromwellTestkitSpec {
 
     def submit(sources: WorkflowSourceFiles): WorkflowId = {
       val newWorkflow = WorkflowToStart(WorkflowId.randomId(), sources, Submitted)
-      val submitMessage = WorkflowStoreActor.NewWorkflows(List(newWorkflow))
+      val submitMessage = WorkflowStoreActor.NewWorkflowsToStart(List(newWorkflow))
       Await.result(manager.ask(submitMessage)(TimeoutDuration), Duration.Inf).asInstanceOf[WorkflowManagerSubmitSuccess].id
     }
   }

@@ -10,7 +10,7 @@ import cromwell.core.WorkflowId
 import cromwell.database.obj.WorkflowMetadataKeys
 import cromwell.engine.workflow.WorkflowDescriptorBuilder
 import cromwell.engine.workflow.WorkflowManagerActor.{AbortWorkflowCommand, WorkflowNotFoundException}
-import cromwell.engine.workflow.WorkflowStoreActor.{SubmitWorkflow, SubmitWorkflows, WorkflowSubmitted, WorkflowsSubmitted}
+import cromwell.engine.workflow.WorkflowStoreActor.{SubmitWorkflow, BatchSubmitWorkflows, WorkflowSubmitted, WorkflowsBatchSubmitted}
 import cromwell.server.WorkflowManagerSystem
 import cromwell.services.MetadataServiceActor._
 import cromwell.services.MetadataSummaryRefreshActor.{MetadataSummarySuccess, SummarizeMetadata}
@@ -33,8 +33,8 @@ class MockWorkflowStoreActor extends Actor {
 
   override def receive = {
     case SubmitWorkflow(source) => sender ! WorkflowSubmitted(submittedWorkflowId)
-    case SubmitWorkflows(sources) =>
-      val response = WorkflowsSubmitted(sources.toList map { _ => submittedWorkflowId })
+    case BatchSubmitWorkflows(sources) =>
+      val response = WorkflowsBatchSubmitted(sources map { _ => submittedWorkflowId })
       sender ! response
   }
 }
@@ -251,7 +251,6 @@ class CromwellApiServiceSpec extends FlatSpec with CromwellApiService with Scala
   }
 
   behavior of "REST API batch submission endpoint"
-  // FIXME and here too
   it should "return 200 for a successful workflow submission " in {
     val inputs = HelloWorld.rawInputs.toJson
 

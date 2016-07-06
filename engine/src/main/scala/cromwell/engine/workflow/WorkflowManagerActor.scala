@@ -18,6 +18,7 @@ import lenthall.config.ScalaConfig.EnhancedScalaConfig
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
 import scala.language.postfixOps
+import scalaz.NonEmptyList
 
 object WorkflowManagerActor {
   val DefaultMaxWorkflowsToLaunch = 50
@@ -56,12 +57,10 @@ object WorkflowManagerActor {
     */
   case class WorkflowManagerData(workflows: Map[WorkflowId, ActorRef]) {
     def idFromActor(actor: ActorRef): Option[WorkflowId] = workflows.collectFirst { case (id, a) if a == actor => id }
-    def withAddition(entry: WorkflowIdToActorRef): WorkflowManagerData =
-      this.copy(workflows = workflows + (entry.workflowId -> entry.workflowActor))
 
-    def withAddition(entries: List[WorkflowIdToActorRef]): WorkflowManagerData = {
+    def withAddition(entries: NonEmptyList[WorkflowIdToActorRef]): WorkflowManagerData = {
       val entryTuples = entries map { e => e.workflowId -> e.workflowActor }
-      this.copy(workflows = workflows ++ entryTuples)
+      this.copy(workflows = workflows ++ entryTuples.list)
     }
 
     def without(id: WorkflowId): WorkflowManagerData = this.copy(workflows = workflows - id)
@@ -121,10 +120,14 @@ class WorkflowManagerActor(config: Config, workflowStore: ActorRef)
     case Event(RetrieveNewWorkflows, stateData) =>
       workflowStore ! WorkflowStoreActor.FetchRunnableWorkflows(maxWorkflowsToLaunch)
       stay()
-    case Event(WorkflowStoreActor.NewWorkflows(newWorkflows), stateData) =>
+    case Event(WorkflowStoreActor.NoNewWorkflowsToStart, stateData) =>
+      log.debug("WorkflowStore provided no new workflows to start")
+      scheduleNextNewWorkflowPoll()
+      stay()
+    case Event(WorkflowStoreActor.NewWorkflowsToStart(newWorkflows), stateData) =>
       val newSubmissions = newWorkflows map submitWorkflow
       log.debug(s"Retrieved ${newSubmissions.size} workflows from the WorkflowStoreActor")
-      context.system.scheduler.scheduleOnce(newWorkflowPollRate, self, RetrieveNewWorkflows)(context.dispatcher)
+      scheduleNextNewWorkflowPoll()
       stay() using stateData.withAddition(newSubmissions)
     case Event(SubscribeToWorkflowCommand(id), data) =>
       data.workflows.get(id) foreach {_ ! SubscribeTransitionCallBack(sender())}
@@ -226,6 +229,10 @@ class WorkflowManagerActor(config: Config, workflowStore: ActorRef)
     wfActor ! StartWorkflowCommand
     logger.info(s"$tag Successfully started ${wfActor.path.name}")
     WorkflowIdToActorRef(workflowId, wfActor)
+  }
+
+  private def scheduleNextNewWorkflowPoll(): Unit = {
+    context.system.scheduler.scheduleOnce(newWorkflowPollRate, self, RetrieveNewWorkflows)(context.dispatcher)
   }
 }
 
