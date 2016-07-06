@@ -65,6 +65,17 @@ lazy val jesBackend = (project in backendRoot / "jes")
 
 lazy val engine = (project in file("engine"))
   .settings(engineSettings: _*)
+<<<<<<< HEAD
+=======
+  .dependsOn(core % "test->test;compile->compile")
+  .dependsOn(services % "test->test;compile->compile")
+  .dependsOn(backend % "test->test;compile->compile")
+  .dependsOn(jesBackend % "test->test;compile->compile")
+  .dependsOn(localBackend % "test->test;compile->compile")
+  .dependsOn(htCondorBackend % "test->test;compile->compile")
+  .dependsOn(sparkBackend % "test->test;compile->compile")
+  .dependsOn(database % "test->test;compile->compile")
+>>>>>>> adding spark backend support in Cromwell backend.
   .withTestSettings
   .dependsOn(core)
   .dependsOn(services)
