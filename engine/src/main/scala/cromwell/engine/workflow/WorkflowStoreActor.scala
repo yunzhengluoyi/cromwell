@@ -106,9 +106,19 @@ class WorkflowStoreActor extends WorkflowStore with Actor with ServiceRegistryCl
       val ids = add(sources)
       ids foreach registerIdWithMetadataService
       sender ! WorkflowsBatchSubmitted(ids)
-    case FetchRunnableWorkflows(n) => sender ! NewWorkflowsToStart(fetchRunnableWorkflows(n))
+    case FetchRunnableWorkflows(n) => sender ! newWorkflowMessage(n)
     case RemoveWorkflow(id) =>
       if (remove(id).isEmpty) logger.info(s"Attempted to remove ID $id from the WorkflowStore but it already exists!")
+  }
+
+  /**
+    * Fetches at most n workflows, and builds the correct response message based on if there were any workflows or not
+    */
+  private def newWorkflowMessage(maxWorkflows: Int): WorkflowStoreActorResponse = {
+    fetchRunnableWorkflows(maxWorkflows) match {
+      case x :: xs => NewWorkflowsToStart(NonEmptyList.nel(x, xs))
+      case _ => NoNewWorkflowsToStart
+    }
   }
 
   /**

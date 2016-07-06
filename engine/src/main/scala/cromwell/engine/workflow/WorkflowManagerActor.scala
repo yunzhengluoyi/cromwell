@@ -21,6 +21,7 @@ import scala.language.postfixOps
 import scalaz.NonEmptyList
 
 object WorkflowManagerActor {
+  val DefaultMaxWorkflowsToRun = 5000
   val DefaultMaxWorkflowsToLaunch = 50
   val DefaultNewWorkflowPollRate = 20
 
@@ -78,7 +79,8 @@ class WorkflowManagerActor(config: Config, workflowStore: ActorRef)
   def this(workflowStore: ActorRef) = this(ConfigFactory.load, workflowStore)
   implicit val actorSystem = context.system
 
-  private val maxWorkflowsToLaunch = config.getConfig("system").getIntOr("max-workflows-to-launch", default=DefaultMaxWorkflowsToLaunch)
+  private val maxWorkflowsRunning = config.getConfig("system").getIntOr("max-workflows-running-at-once", default=DefaultMaxWorkflowsToRun)
+  private val maxWorkflowsToLaunch = config.getConfig("system").getIntOr("max-workflows-to-launch-at-once", default=DefaultMaxWorkflowsToLaunch)
   private val newWorkflowPollRate = config.getConfig("system").getIntOr("new-workflow-poll-rate", default=DefaultNewWorkflowPollRate).seconds
 
   private val restartDelay: FiniteDuration = 200 milliseconds
@@ -118,7 +120,12 @@ class WorkflowManagerActor(config: Config, workflowStore: ActorRef)
      Commands from clients
      */
     case Event(RetrieveNewWorkflows, stateData) =>
-      workflowStore ! WorkflowStoreActor.FetchRunnableWorkflows(maxWorkflowsToLaunch)
+      /*
+        Cap the total number of workflows in flight, but also make sure we don't pull too many in at once.
+        Determine the number of available workflow slots and request the smaller of that number of maxWorkflowsToLaunch.
+       */
+      val maxNewWorkflows = maxWorkflowsToLaunch min (maxWorkflowsRunning - stateData.workflows.size)
+      workflowStore ! WorkflowStoreActor.FetchRunnableWorkflows(maxNewWorkflows)
       stay()
     case Event(WorkflowStoreActor.NoNewWorkflowsToStart, stateData) =>
       log.debug("WorkflowStore provided no new workflows to start")
