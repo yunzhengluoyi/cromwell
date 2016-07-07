@@ -79,8 +79,8 @@ class WorkflowManagerActor(config: Config, val workflowStore: ActorRef)
   def this(workflowStore: ActorRef) = this(ConfigFactory.load, workflowStore)
   implicit val actorSystem = context.system
 
-  private val maxWorkflowsRunning = config.getConfig("system").getIntOr("max-workflows-running-at-once", default=DefaultMaxWorkflowsToRun)
-  private val maxWorkflowsToLaunch = config.getConfig("system").getIntOr("max-workflows-to-launch-at-once", default=DefaultMaxWorkflowsToLaunch)
+  private val maxWorkflowsRunning = config.getConfig("system").getIntOr("max-concurrent-workflows", default=DefaultMaxWorkflowsToRun)
+  private val maxWorkflowsToLaunch = config.getConfig("system").getIntOr("max-workflow-launch-count", default=DefaultMaxWorkflowsToLaunch)
   private val newWorkflowPollRate = config.getConfig("system").getIntOr("new-workflow-poll-rate", default=DefaultNewWorkflowPollRate).seconds
 
   private val restartDelay: FiniteDuration = 200 milliseconds
