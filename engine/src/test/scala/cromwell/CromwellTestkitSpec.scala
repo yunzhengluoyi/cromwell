@@ -16,6 +16,7 @@ import cromwell.engine._
 import cromwell.engine.backend.BackendConfigurationEntry
 import cromwell.engine.workflow.{WorkflowManagerActor, WorkflowStore, WorkflowStoreActor}
 import cromwell.engine.workflow.WorkflowStore.{Submitted, WorkflowToStart}
+import cromwell.engine.workflow.WorkflowStoreActor.WorkflowSubmitted
 import cromwell.server.WorkflowManagerSystem
 import cromwell.services.MetadataQuery
 import cromwell.services.MetadataServiceActor._
@@ -176,11 +177,10 @@ object CromwellTestkitSpec {
   lazy val AnyValueIsFine: WdlValue = WdlString("Today you are you! That is truer than true! There is no one alive who is you-er than you!")
 
   implicit class EnhancedWorkflowManagerActor(val manager: TestActorRef[WorkflowManagerActor]) extends AnyVal {
-
     def submit(sources: WorkflowSourceFiles): WorkflowId = {
       val newWorkflow = WorkflowToStart(WorkflowId.randomId(), sources, Submitted)
       val submitMessage = WorkflowStoreActor.NewWorkflowsToStart(NonEmptyList(newWorkflow))
-      Await.result(manager.ask(submitMessage)(TimeoutDuration), Duration.Inf).asInstanceOf[WorkflowManagerSubmitSuccess].id
+      Await.result(manager.underlyingActor.workflowStore.ask(submitMessage)(TimeoutDuration), Duration.Inf).asInstanceOf[WorkflowSubmitted].workflowId
     }
   }
 

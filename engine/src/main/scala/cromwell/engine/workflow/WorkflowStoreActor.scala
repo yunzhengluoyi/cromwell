@@ -77,14 +77,14 @@ abstract class WorkflowStore {
     startableWorkflows map { _.toWorkflowToStart }
   }
 
-  def remove(id: WorkflowId): Option[Unit] = {
+  def remove(id: WorkflowId): Boolean = {
     val newWorkflowStore = workflowStore filterNot { _.id == id }
 
     if (newWorkflowStore == workflowStore) {
-      None
+      false
     } else {
       workflowStore = newWorkflowStore
-      Some(())
+      true
     }
   }
 }
@@ -108,7 +108,7 @@ class WorkflowStoreActor extends WorkflowStore with Actor with ServiceRegistryCl
       sender ! WorkflowsBatchSubmitted(ids)
     case FetchRunnableWorkflows(n) => sender ! newWorkflowMessage(n)
     case RemoveWorkflow(id) =>
-      if (remove(id).isEmpty) logger.info(s"Attempted to remove ID $id from the WorkflowStore but it already exists!")
+      if (!remove(id)) logger.info(s"Attempted to remove ID $id from the WorkflowStore but it already exists!")
   }
 
   /**

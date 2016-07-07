@@ -73,7 +73,7 @@ object WorkflowManagerActor {
   }
 }
 
-class WorkflowManagerActor(config: Config, workflowStore: ActorRef)
+class WorkflowManagerActor(config: Config, val workflowStore: ActorRef)
   extends LoggingFSM[WorkflowManagerState, WorkflowManagerData] with CromwellActor with ServiceRegistryClient {
 
   def this(workflowStore: ActorRef) = this(ConfigFactory.load, workflowStore)
