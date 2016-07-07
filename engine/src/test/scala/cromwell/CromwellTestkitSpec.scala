@@ -176,8 +176,7 @@ object CromwellTestkitSpec {
 
   implicit class EnhancedWorkflowManagerActor(val manager: TestActorRef[WorkflowManagerActor]) extends AnyVal {
     def submit(sources: WorkflowSourceFiles): WorkflowId = {
-      val newWorkflow = WorkflowToStart(WorkflowId.randomId(), sources, Submitted)
-      val submitMessage = WorkflowStoreActor.NewWorkflowsToStart(NonEmptyList(newWorkflow))
+      val submitMessage = WorkflowStoreActor.SubmitWorkflow(sources)
       Await.result(manager.underlyingActor.workflowStore.ask(submitMessage)(TimeoutDuration), Duration.Inf).asInstanceOf[WorkflowSubmittedToStore].workflowId
     }
   }
