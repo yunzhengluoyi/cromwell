@@ -12,16 +12,14 @@ import cromwell.backend._
 import cromwell.core.retry.{Retry, SimpleExponentialBackoff}
 import cromwell.core.{WorkflowId, _}
 import cromwell.database.obj.WorkflowMetadataKeys
-import cromwell.engine._
 import cromwell.engine.backend.BackendConfigurationEntry
-import cromwell.engine.workflow.{WorkflowManagerActor, WorkflowStore, WorkflowStoreActor}
+import cromwell.engine.workflow.{WorkflowManagerActor, WorkflowStoreActor}
 import cromwell.engine.workflow.WorkflowStore.{Submitted, WorkflowToStart}
-import cromwell.engine.workflow.WorkflowStoreActor.WorkflowSubmitted
+import cromwell.engine.workflow.WorkflowStoreActor.WorkflowSubmittedToStore
 import cromwell.server.WorkflowManagerSystem
 import cromwell.services.MetadataQuery
 import cromwell.services.MetadataServiceActor._
 import cromwell.util.SampleWdl
-import cromwell.webservice.CromwellApiHandler._
 import cromwell.webservice.PerRequest.RequestComplete
 import cromwell.webservice.metadata.MetadataBuilderActor
 import org.scalactic.Equality
@@ -180,7 +178,7 @@ object CromwellTestkitSpec {
     def submit(sources: WorkflowSourceFiles): WorkflowId = {
       val newWorkflow = WorkflowToStart(WorkflowId.randomId(), sources, Submitted)
       val submitMessage = WorkflowStoreActor.NewWorkflowsToStart(NonEmptyList(newWorkflow))
-      Await.result(manager.underlyingActor.workflowStore.ask(submitMessage)(TimeoutDuration), Duration.Inf).asInstanceOf[WorkflowSubmitted].workflowId
+      Await.result(manager.underlyingActor.workflowStore.ask(submitMessage)(TimeoutDuration), Duration.Inf).asInstanceOf[WorkflowSubmittedToStore].workflowId
     }
   }
 

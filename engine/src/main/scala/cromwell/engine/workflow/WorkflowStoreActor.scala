@@ -101,11 +101,11 @@ class WorkflowStoreActor extends WorkflowStore with Actor with ServiceRegistryCl
     case SubmitWorkflow(source) =>
       val id = add(NonEmptyList(source)).head
       registerIdWithMetadataService(id)
-      sender ! WorkflowSubmitted(id)
+      sender ! WorkflowSubmittedToStore(id)
     case BatchSubmitWorkflows(sources) =>
       val ids = add(sources)
       ids foreach registerIdWithMetadataService
-      sender ! WorkflowsBatchSubmitted(ids)
+      sender ! WorkflowsBatchSubmittedToStore(ids)
     case FetchRunnableWorkflows(n) => sender ! newWorkflowMessage(n)
     case RemoveWorkflow(id) =>
       if (!remove(id)) logger.info(s"Attempted to remove ID $id from the WorkflowStore but it already exists!")
@@ -143,8 +143,8 @@ object WorkflowStoreActor {
   case class RemoveWorkflow(id: WorkflowId) extends WorkflowStoreActorCommand
 
   sealed trait WorkflowStoreActorResponse
-  case class WorkflowSubmitted(workflowId: WorkflowId) extends WorkflowStoreActorResponse
-  case class WorkflowsBatchSubmitted(workflowIds: NonEmptyList[WorkflowId]) extends WorkflowStoreActorResponse
+  case class WorkflowSubmittedToStore(workflowId: WorkflowId) extends WorkflowStoreActorResponse
+  case class WorkflowsBatchSubmittedToStore(workflowIds: NonEmptyList[WorkflowId]) extends WorkflowStoreActorResponse
   case object NoNewWorkflowsToStart extends WorkflowStoreActorResponse
   case class NewWorkflowsToStart(workflows: NonEmptyList[WorkflowToStart]) extends WorkflowStoreActorResponse
 
