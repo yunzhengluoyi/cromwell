@@ -38,7 +38,6 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
-import scalaz.NonEmptyList
 
 case class TestBackendLifecycleActorFactory(configurationDescriptor: BackendConfigurationDescriptor) extends BackendLifecycleActorFactory {
   override def workflowInitializationActorProps(workflowDescriptor: BackendWorkflowDescriptor,
@@ -90,6 +89,10 @@ object CromwellTestkitSpec {
       |    single-expect-default = 5s
       |    default-timeout = 10s
       |  }
+      |}
+      |
+      |system {
+      |  new-workflow-poll-rate = 1
       |}
       |
       |services {}
