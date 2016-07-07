@@ -53,14 +53,14 @@ class WorkflowStoreSpec extends FlatSpec with Matchers {
   it should "remove workflows which exist" in {
     val store = new SpecWorkflowStore
     val id = store.add(NonEmptyList(sources)).head
-    store.remove(id) shouldBe defined
+    store.remove(id) shouldBe true
     store.workflowStore shouldBe empty
   }
 
   it should "not be super happy if you ask to remove a workflow it doesn't have" in {
     val store = new SpecWorkflowStore
     val id = store.add(NonEmptyList(sources)).head
-    store.remove(WorkflowId.randomId()) shouldBe empty
+    store.remove(WorkflowId.randomId()) shouldBe false
     store.workflowStore should have size 1
   }
 }
