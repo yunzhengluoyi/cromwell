@@ -1,7 +1,7 @@
 package cromwell.backend.impl.local
 
 import cromwell.backend.BackendConfigurationDescriptor
-import cromwell.filesystems.gcs.GoogleConfiguration
+import cromwell.filesystems.gcs._
 import lenthall.config.ScalaConfig._
 import wdl4s.ThrowableWithErrors
 
