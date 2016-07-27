@@ -4,7 +4,7 @@ import akka.actor.Props
 import cromwell.backend.validation.RuntimeAttributesKeys._
 import cromwell.backend.impl.spark.SparkInitializationActor._
 import cromwell.backend.{BackendConfigurationDescriptor, BackendWorkflowDescriptor, BackendWorkflowInitializationActor}
-import wdl4s.types.{WdlBooleanType, WdlStringType}
+import wdl4s.types.WdlBooleanType
 import wdl4s.{WdlExpression, Call}
 
 import scala.concurrent.Future
@@ -22,7 +22,7 @@ class SparkInitializationActor(override val workflowDescriptor: BackendWorkflowD
                                override val calls: Seq[Call],
                                override val configurationDescriptor: BackendConfigurationDescriptor) extends BackendWorkflowInitializationActor {
 
-  override protected def runtimeAttributeValidators: Map[String, (Option[WdlExpression]) => Boolean] =  Map(
+  override protected def runtimeAttributeValidators: Map[String, (Option[WdlExpression]) => Boolean] = Map(
     FailOnStderrKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
     SparkRuntimeAttributes.AppMainClassKey -> wdlTypePredicate(valueRequired = true, WdlBooleanType.isCoerceableFrom),
     SparkRuntimeAttributes.NumberOfExecutorsKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
@@ -50,7 +50,9 @@ class SparkInitializationActor(override val workflowDescriptor: BackendWorkflowD
     Future {
       calls foreach { call =>
         val runtimeAttributes = call.task.runtimeAttributes.attrs
-        val notSupportedAttributes = runtimeAttributes filterKeys { !SupportedKeys.contains(_) }
+        val notSupportedAttributes = runtimeAttributes filterKeys {
+          !SupportedKeys.contains(_)
+        }
         if (notSupportedAttributes.nonEmpty) {
           val notSupportedAttrString = notSupportedAttributes.keys mkString ", "
           log.warning(s"Key/s [$notSupportedAttrString] is/are not supported by SparkBackend. Unsupported attributes will not be part of jobs executions.")
