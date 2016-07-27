@@ -1,6 +1,5 @@
 package cromwell.backend.impl.spark
 
-import com.typesafe.config.ConfigFactory
 import cromwell.backend.MemorySize
 import cromwell.backend.validation.RuntimeAttributesDefault._
 import cromwell.backend.validation.RuntimeAttributesKeys._
@@ -20,7 +19,7 @@ object SparkRuntimeAttributes {
   private val SparkDeployModeDefaultValue = "client"
   private val SparkMasterDefaultValue = "local"
 
-  val ExecutorCoresKey  = "executorCores"
+  val ExecutorCoresKey = "executorCores"
   val ExecutorMemoryKey = "executorMemory"
   val AppMainClassKey = "appMainClass"
   //Specific to cluster mode
@@ -53,11 +52,11 @@ object SparkRuntimeAttributes {
 
     val failOnStderr = validateFailOnStderr(withDefaultValues.get(FailOnStderrKey), noValueFoundFor(FailOnStderrKey))
 
-    val executorCores =  validateCpu(withDefaultValues.get(ExecutorCoresKey), noValueFoundFor(ExecutorCoresKey))
+    val executorCores = validateCpu(withDefaultValues.get(ExecutorCoresKey), noValueFoundFor(ExecutorCoresKey))
     val executorMemory = validateMemory(withDefaultValues.get(ExecutorMemoryKey), noValueFoundFor(ExecutorMemoryKey))
     val numberOfExecutors = validateNumberOfExecutors(withDefaultValues.get(NumberOfExecutorsKey), None.successNel)
     val appMainCLass = validateAppEntryPoint(withDefaultValues(AppMainClassKey))
-    val deployMode =  validateSparkDeployMode(withDefaultValues.get(SparkDeployMode), None.successNel)
+    val deployMode = validateSparkDeployMode(withDefaultValues.get(SparkDeployMode), None.successNel)
     val sparkMaster = validateSparkMaster(withDefaultValues.get(SparkMaster), None.successNel)
 
     (executorCores |@| executorMemory |@| numberOfExecutors |@| appMainCLass |@| deployMode |@| sparkMaster |@| failOnStderr) {
@@ -87,7 +86,7 @@ object SparkRuntimeAttributes {
     }
   }
 
-  private def validateSparkDeployMode(sparkDeployMode: Option[WdlValue],onMissingKey: => ErrorOr[Option[String]]): ErrorOr[Option[String]] = {
+  private def validateSparkDeployMode(sparkDeployMode: Option[WdlValue], onMissingKey: => ErrorOr[Option[String]]): ErrorOr[Option[String]] = {
     sparkDeployMode match {
       case Some(s: WdlString) => Some(s.value).successNel
       case None => onMissingKey
@@ -95,7 +94,7 @@ object SparkRuntimeAttributes {
     }
   }
 
-  private def validateSparkMaster(sparkMaster: Option[WdlValue],onMissingKey: => ErrorOr[Option[String]]): ErrorOr[Option[String]] = {
+  private def validateSparkMaster(sparkMaster: Option[WdlValue], onMissingKey: => ErrorOr[Option[String]]): ErrorOr[Option[String]] = {
     sparkMaster match {
       case Some(s: WdlString) => Some(s.value).successNel
       case None => onMissingKey
@@ -104,7 +103,6 @@ object SparkRuntimeAttributes {
   }
 
 }
-
 
 case class SparkRuntimeAttributes(executorCores: Int, executorMemory: MemorySize, numberOfExecutors: Option[Int],
                                   appMainClass: String, deployMode: Option[String], sparkMaster: Option[String],

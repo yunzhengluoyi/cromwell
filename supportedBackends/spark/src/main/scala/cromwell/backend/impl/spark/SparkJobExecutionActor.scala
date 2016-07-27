@@ -1,16 +1,13 @@
 package cromwell.backend.impl.spark
 
-import java.nio.file.{FileSystems, Path}
+import java.nio.file.FileSystems
 import java.nio.file.attribute.PosixFilePermission
 
 import akka.actor.Props
 import cromwell.backend.BackendJobExecutionActor.{BackendJobExecutionResponse, FailedNonRetryableResponse, SucceededResponse}
-import cromwell.backend.impl.spark
 import cromwell.backend.io.{JobPaths, SharedFileSystem, SharedFsExpressionFunctions}
 import cromwell.backend.{BackendConfigurationDescriptor, BackendJobDescriptor, BackendJobExecutionActor}
-import wdl4s._
 import wdl4s.parser.MemoryUnit
-import wdl4s.types.WdlFileType
 import wdl4s.util.TryUtil
 
 import scala.concurrent.{Future, Promise}
@@ -27,11 +24,12 @@ object SparkJobExecutionActor {
 
 class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
                              override val configurationDescriptor: BackendConfigurationDescriptor) extends BackendJobExecutionActor with SharedFileSystem {
+
   import SparkJobExecutionActor._
   import better.files._
   import cromwell.core.PathFactory._
 
-  private val tag = s"CondorJobExecutionActor-${jobDescriptor.call.fullyQualifiedName}:"
+  private val tag = s"SparkJobExecutionActor-${jobDescriptor.call.fullyQualifiedName}:"
 
   lazy val cmds = new SparkCommands
   lazy val extProcess = new SparkProcess
@@ -85,7 +83,7 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
     log.debug("{} Return code of spark submit command: {}", tag, jobReturnCode)
     List(stdoutWriter.writer, stderrWriter.writer).foreach(_.flushAndClose())
     (jobReturnCode, runtimeAttributes.failOnStderr) match {
-      case (Success(0), false)  => processSuccess(0)
+      case (Success(0), false) => processSuccess(0)
       case (Success(0), true) if jobPaths.stderr.lines.toList.isEmpty => processSuccess(0)
       case (Success(0), true) => FailedNonRetryableResponse(jobDescriptor.key,
         new IllegalStateException(s"Execution process failed although return code is zero but stderr is not empty"), Option(0))
@@ -119,7 +117,7 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
 
       log.debug("{} Resolving job command", tag)
       val command = localizeInputs(jobPaths.callRoot, docker = false, fileSystems, jobDescriptor.inputs) flatMap {
-        localizedInputs =>  call.task.instantiateCommand(localizedInputs, callEngineFunction, identity)
+        localizedInputs => call.task.instantiateCommand(localizedInputs, callEngineFunction, identity)
       }
 
       log.debug("{} Creating bash script for executing command: {}", tag, command)
