@@ -5,9 +5,11 @@ import java.nio.file.attribute.PosixFilePermission
 
 import akka.actor.Props
 import cromwell.backend.BackendJobExecutionActor.{BackendJobExecutionResponse, FailedNonRetryableResponse, SucceededResponse}
+import cromwell.backend.impl.spark
 import cromwell.backend.io.{JobPaths, SharedFileSystem, SharedFsExpressionFunctions}
 import cromwell.backend.{BackendConfigurationDescriptor, BackendJobDescriptor, BackendJobExecutionActor}
 import wdl4s._
+import wdl4s.parser.MemoryUnit
 import wdl4s.types.WdlFileType
 import wdl4s.util.TryUtil
 
@@ -33,6 +35,7 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
 
   lazy val cmds = new SparkCommands
   lazy val extProcess = new SparkProcess
+  lazy val clusterManagerConfig = configurationDescriptor.backendConfig.getConfig("cluster-manager")
   private val fileSystemsConfig = configurationDescriptor.backendConfig.getConfig("filesystems")
   override val sharedFsConfig = fileSystemsConfig.getConfig("local")
   private val workflowDescriptor = jobDescriptor.descriptor
@@ -81,11 +84,14 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
     val jobReturnCode = Try(process.exitValue()) // blocks until process (i.e. spark submission) finishes
     log.debug("{} Return code of spark submit command: {}", tag, jobReturnCode)
     List(stdoutWriter.writer, stderrWriter.writer).foreach(_.flushAndClose())
-    jobReturnCode match {
-      case Success(rc) if rc == 0 | runtimeAttributes.continueOnReturnCode.continueFor(rc) => processSuccess(rc)
-      case Success(rc) => FailedNonRetryableResponse(jobDescriptor.key,
+    (jobReturnCode, runtimeAttributes.failOnStderr) match {
+      case (Success(0), false)  => processSuccess(0)
+      case (Success(0), true) if jobPaths.stderr.lines.toList.isEmpty => processSuccess(0)
+      case (Success(0), true) => FailedNonRetryableResponse(jobDescriptor.key,
+        new IllegalStateException(s"Execution process failed although return code is zero but stderr is not empty"), Option(0))
+      case (Success(rc), _) => FailedNonRetryableResponse(jobDescriptor.key,
         new IllegalStateException(s"Execution process failed. Spark returned non zero status code: $jobReturnCode"), Option(rc))
-      case Failure(error) => FailedNonRetryableResponse(jobDescriptor.key, error, None)
+      case (Failure(error), _) => FailedNonRetryableResponse(jobDescriptor.key, error, None)
     }
   }
 
@@ -113,11 +119,20 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
 
       log.debug("{} Resolving job command", tag)
       val command = localizeInputs(jobPaths.callRoot, docker = false, fileSystems, jobDescriptor.inputs) flatMap {
-        localizedInputs => resolveJobCommand(localizedInputs)
+        localizedInputs =>  call.task.instantiateCommand(localizedInputs, callEngineFunction, identity)
       }
 
       log.debug("{} Creating bash script for executing command: {}", tag, command)
-      cmds.writeScript(command.get, scriptPath, executionDir) // Writes the bash script for executing the command
+      val attributes: Map[String, Any] = Map(
+        SparkCommands.APP_MAIN_CLASS -> runtimeAttributes.appMainClass,
+        SparkCommands.DEPLOY_MODE -> runtimeAttributes.deployMode.get,
+        SparkCommands.MASTER -> runtimeAttributes.sparkMaster.get,
+        SparkCommands.EXECUTOR_CORES -> runtimeAttributes.executorCores,
+        SparkCommands.EXECUTOR_MEMORY -> runtimeAttributes.executorMemory.to(MemoryUnit.GB).amount.toLong,
+        SparkCommands.SPARK_APP_WITH_ARGS -> command.get
+      )
+
+      cmds.writeScript(cmds.sparkSubmitCommand(attributes), scriptPath, executionDir) // Writes the bash script for executing the command
       scriptPath.addPermission(PosixFilePermission.OWNER_EXECUTE) // Add executable permissions to the script.
     } catch {
       case ex: Exception =>
@@ -126,36 +141,9 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
     }
   }
 
-  private def resolveJobCommand(localizedInputs: CallInputs): Try[String] = {
-    if (runtimeAttributes.dockerImage.isDefined)
-      modifyCommandForDocker(call.task.instantiateCommand(localizedInputs, callEngineFunction, identity), localizedInputs)
-    else
-      call.task.instantiateCommand(localizedInputs, callEngineFunction, identity)
-  }
-
-  private def modifyCommandForDocker(jobCmd: Try[String], localizedInputs: CallInputs): Try[String] = {
-    Try {
-      val inputFiles = localizedInputs.filter { case (k,v) => v.wdlType.equals(WdlFileType) }
-      val dockerInputDataVol: Seq[String] = inputFiles.values.map { value =>
-        val limit = value.valueString.lastIndexOf("/")
-        value.valueString.substring(0, limit)
-      } toSeq
-      val dockerCmd = "docker run -w %s %s %s --rm %s %s"
-      val dockerVolume = "-v %s:%s"
-      val dockerVolumeInputs = s"$dockerVolume:ro"
-      // `v.get` is safe below since we filtered the list earlier with only defined elements
-      val inputVolumes = dockerInputDataVol.distinct.map(v => dockerVolumeInputs.format(v, v)).mkString(" ")
-      val outputVolume = dockerVolume.format(executionDir.toAbsolutePath.toString, runtimeAttributes.dockerOutputDir.getOrElse(executionDir.toAbsolutePath.toString))
-      val cmd = dockerCmd.format(runtimeAttributes.dockerWorkingDir.getOrElse(executionDir.toAbsolutePath.toString), inputVolumes, outputVolume, runtimeAttributes.dockerImage.get, jobCmd.get)
-      log.debug(s"Docker command line to be used for task execution: $cmd.")
-      cmd
-    }
-  }
-
   private def prepareAndExecute: Unit = {
     createExecutionFolderAndScript()
     executionResponse success executeTask()
   }
-
 
 }

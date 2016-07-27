@@ -10,7 +10,9 @@ import wdl4s.{WdlExpression, Call}
 import scala.concurrent.Future
 
 object SparkInitializationActor {
-  val SupportedKeys = Set(DockerKey, FailOnStderrKey, ContinueOnReturnCodeKey)
+  val SupportedKeys = Set(FailOnStderrKey, SparkRuntimeAttributes.ExecutorCoresKey, SparkRuntimeAttributes.ExecutorMemoryKey,
+    SparkRuntimeAttributes.NumberOfExecutorsKey, SparkRuntimeAttributes.AppMainClassKey, SparkRuntimeAttributes.SparkDeployMode,
+    SparkRuntimeAttributes.SparkMaster)
 
   def props(workflowDescriptor: BackendWorkflowDescriptor, calls: Seq[Call], configurationDescriptor: BackendConfigurationDescriptor): Props =
     Props(new SparkInitializationActor(workflowDescriptor, calls, configurationDescriptor))
@@ -21,9 +23,13 @@ class SparkInitializationActor(override val workflowDescriptor: BackendWorkflowD
                                override val configurationDescriptor: BackendConfigurationDescriptor) extends BackendWorkflowInitializationActor {
 
   override protected def runtimeAttributeValidators: Map[String, (Option[WdlExpression]) => Boolean] =  Map(
-    DockerKey -> wdlTypePredicate(valueRequired = false, WdlStringType.isCoerceableFrom),
     FailOnStderrKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
-    ContinueOnReturnCodeKey -> continueOnReturnCodePredicate(valueRequired = false)
+    SparkRuntimeAttributes.AppMainClassKey -> wdlTypePredicate(valueRequired = true, WdlBooleanType.isCoerceableFrom),
+    SparkRuntimeAttributes.NumberOfExecutorsKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
+    SparkRuntimeAttributes.ExecutorMemoryKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
+    SparkRuntimeAttributes.ExecutorCoresKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
+    SparkRuntimeAttributes.SparkDeployMode -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
+    SparkRuntimeAttributes.SparkMaster -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom)
   )
 
   /**
@@ -32,14 +38,15 @@ class SparkInitializationActor(override val workflowDescriptor: BackendWorkflowD
   override def abortInitialization(): Unit = throw new UnsupportedOperationException("aborting initialization is not supported")
 
   /**
-    * Validate that this WorkflowBackendActor can run all of the calls that it's been assigned
+    * A call which happens before anything else runs
     */
-  override def validate(): Future[Unit] = Future.successful(())
+  override def beforeAll(): Future[Unit] = Future.successful(())
+
 
   /**
     * A call which happens before anything else runs
     */
-  override def beforeAll(): Future[Unit] = {
+  override def validate(): Future[Unit] = {
     Future {
       calls foreach { call =>
         val runtimeAttributes = call.task.runtimeAttributes.attrs
