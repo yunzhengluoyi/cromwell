@@ -20,9 +20,8 @@ class SparkInitializationActorSpec  extends TestKit(ActorSystem("SparkInitializa
   val HelloWorld =
     """
       |task hello {
-      |  String addressee = "you"
       |  command {
-      |    echo "Hello ${addressee}!"
+      |    helloApp
       |  }
       |  output {
       |    String salutation = read_string(stdout())
@@ -54,7 +53,7 @@ class SparkInitializationActorSpec  extends TestKit(ActorSystem("SparkInitializa
     system.shutdown()
   }
 
-  private def getHtCondorBackend(workflowDescriptor: BackendWorkflowDescriptor, calls: Seq[Call], conf: BackendConfigurationDescriptor) = {
+  private def getSparkBackend(workflowDescriptor: BackendWorkflowDescriptor, calls: Seq[Call], conf: BackendConfigurationDescriptor) = {
     system.actorOf(SparkInitializationActor.props(workflowDescriptor, calls, conf))
   }
 
@@ -62,8 +61,8 @@ class SparkInitializationActorSpec  extends TestKit(ActorSystem("SparkInitializa
     "log a warning message when there are unsupported runtime attributes" in {
       within(Timeout) {
         EventFilter.warning(message = s"Key/s [memory] is/are not supported by SparkBackend. Unsupported attributes will not be part of jobs executions.", occurrences = 1) intercept {
-          val workflowDescriptor = buildWorkflowDescriptor(HelloWorld, runtime = """runtime { memory: 1 }""")
-          val backend = getHtCondorBackend(workflowDescriptor, workflowDescriptor.workflowNamespace.workflow.calls, defaultBackendConfig)
+          val workflowDescriptor = buildWorkflowDescriptor(HelloWorld, runtime = """runtime { memory: 1 %s: "%s"}""".format("appMainClass", "test"))
+          val backend = getSparkBackend(workflowDescriptor, workflowDescriptor.workflowNamespace.workflow.calls, defaultBackendConfig)
           backend ! Initialize
         }
       }

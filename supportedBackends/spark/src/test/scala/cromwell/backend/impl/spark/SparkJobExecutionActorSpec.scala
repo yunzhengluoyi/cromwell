@@ -1,7 +1,7 @@
 package cromwell.backend.impl.spark
 
 import java.io.{File, FileWriter, Writer}
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.{Path, Paths}
 
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
@@ -17,10 +17,10 @@ import org.mockito.Mockito._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Matchers, WordSpecLike}
-import wdl4s.values.{WdlFile, WdlValue}
+import wdl4s._
+import wdl4s.values.{WdlValue}
 
 import scala.concurrent.duration._
-import scala.io.Source
 import scala.sys.process.{Process, ProcessLogger}
 
 class SparkJobExecutionActorSpec extends TestKit(ActorSystem("SparkJobExecutionActor"))
@@ -40,7 +40,7 @@ class SparkJobExecutionActorSpec extends TestKit(ActorSystem("SparkJobExecutionA
       |task hello {
       |
       |  command {
-      |    echo "Hello World!"
+      |    sparkApp
       |  }
       |  output {
       |    String salutation = read_string(stdout())
@@ -53,22 +53,19 @@ class SparkJobExecutionActorSpec extends TestKit(ActorSystem("SparkJobExecutionA
       |}
     """.stripMargin
 
-  private val helloWorldWdlWithFileInput =
+  private val failedOnStderr =
     """
-      |task hello {
-      |  File inputFile
-      |
-      |  command {
-      |    echo ${inputFile}
-      |  }
-      |  output {
-      |    String salutation = read_string(stdout())
-      |  }
-      |  RUNTIME
+      |runtime {
+      | appMainClass: "test"
+      | failOnStderr: true
       |}
-      |
-      |workflow hello {
-      |  call hello
+    """.stripMargin
+
+  private val passOnStderr =
+    """
+      |runtime {
+      | appMainClass: "test"
+      | failOnStderr: false
       |}
     """.stripMargin
 
@@ -151,14 +148,8 @@ class SparkJobExecutionActorSpec extends TestKit(ActorSystem("SparkJobExecutionA
       cleanUpJob(jobPaths)
     }
 
-    "return a successful task status even with a non-zero process exit" in {
-      val runtime =
-        """
-          |runtime {
-          | continueOnReturnCode: [911]
-          |}
-        """.stripMargin
-      val jobDescriptor = prepareJob(runtimeString = runtime)
+    "return failed task status when stderr is non-empty but process exit with zero return code" in {
+      val jobDescriptor = prepareJob(runtimeString = failedOnStderr)
       val (job, jobPaths, backendConfigDesc) = (jobDescriptor.jobDescriptor, jobDescriptor.jobPaths, jobDescriptor.backendConfigurationDescriptor)
 
       val backend = TestActorRef(new SparkJobExecutionActor(job, backendConfigDesc) {
@@ -168,73 +159,48 @@ class SparkJobExecutionActorSpec extends TestKit(ActorSystem("SparkJobExecutionA
       val stubProcess = mock[Process]
       val stubUntailed = new UntailedWriter(jobPaths.stdout) with MockPathWriter
       val stubTailed = new TailedWriter(jobPaths.stderr, 100) with MockPathWriter
-      val stderrResult = ""
-
-      when(sparkProcess.externalProcess(any[Seq[String]], any[ProcessLogger])).thenReturn(stubProcess)
-      when(stubProcess.exitValue()).thenReturn(911)
-      when(sparkProcess.tailedWriter(any[Int], any[Path])).thenReturn(stubTailed)
-      when(sparkProcess.untailedWriter(any[Path])).thenReturn(stubUntailed)
-      when(sparkProcess.processStderr).thenReturn(stderrResult)
-
-      whenReady(backend.execute, timeout) { response =>
-        response shouldBe a[SucceededResponse]
-      }
-
-      cleanUpJob(jobPaths)
-    }
-
-    "return a successful task status when it runs a docker command with working and output directory" in {
-      val runtime =
-        """
-          |runtime {
-          | docker: "ubuntu/latest"
-          | dockerWorkingDir: "/workingDir"
-          | dockerOutputDir: "/outputDir"
-          |}
-        """.stripMargin
-      val jsonInputFile = createCannedFile("testFile", "some content").toPath.toAbsolutePath.toString
-      val inputs = Map(
-        "inputFile" -> WdlFile(jsonInputFile)
-      )
-      val jobDescriptor = prepareJob(helloWorldWdlWithFileInput, runtime, Option(inputs))
-      val (job, jobPaths, backendConfigDesc) = (jobDescriptor.jobDescriptor, jobDescriptor.jobPaths, jobDescriptor.backendConfigurationDescriptor)
-
-      val backend = TestActorRef(new SparkJobExecutionActor(job, backendConfigDesc) {
-        override lazy val cmds = sparkCommands
-        override lazy val extProcess = sparkProcess
-      }).underlyingActor
-      val stubProcess = mock[Process]
-      val stubUntailed = new UntailedWriter(jobPaths.stdout) with MockPathWriter
-      val stubTailed = new TailedWriter(jobPaths.stderr, 100) with MockPathWriter
-      val stderrResult = ""
+      jobPaths.stderr < "failed"
 
       when(sparkProcess.externalProcess(any[Seq[String]], any[ProcessLogger])).thenReturn(stubProcess)
       when(stubProcess.exitValue()).thenReturn(0)
       when(sparkProcess.tailedWriter(any[Int], any[Path])).thenReturn(stubTailed)
       when(sparkProcess.untailedWriter(any[Path])).thenReturn(stubUntailed)
-      when(sparkProcess.processStderr).thenReturn(stderrResult)
 
-      whenReady(backend.execute) { response =>
-        response shouldBe a[SucceededResponse]
+      whenReady(backend.execute, timeout) { response =>
+        response shouldBe a[FailedNonRetryableResponse]
+        assert(response.asInstanceOf[FailedNonRetryableResponse].throwable.getMessage.contains(s"Execution process failed although return code is zero but stderr is not empty"))
       }
-
-      val bashScript = Source.fromFile(jobPaths.script.toFile).getLines.mkString
-
-      assert(bashScript.contains("docker run -w /workingDir -v"))
-      assert(bashScript.contains(s"${jobPaths.script.getParent.toString}:"))
-      assert(bashScript.contains("/call-hello:/outputDir --rm ubuntu/latest echo"))
 
       cleanUpJob(jobPaths)
     }
-  }
 
-  private def createCannedFile(prefix: String, contents: String, dir: Option[Path] = None): File = {
-    val suffix = ".out"
-    val file = dir match {
-      case Some(path) => Files.createTempFile(path, prefix, suffix)
-      case None => Files.createTempFile(prefix, suffix)
+    "return succeeded task status when stderr is non-empty but process exit with zero return code" in {
+      val jobDescriptor = prepareJob()
+      val (job, jobPaths, backendConfigDesc) = (jobDescriptor.jobDescriptor, jobDescriptor.jobPaths, jobDescriptor.backendConfigurationDescriptor)
+
+      val backend = TestActorRef(new SparkJobExecutionActor(job, backendConfigDesc) {
+        override lazy val cmds = sparkCommands
+        override lazy val extProcess = sparkProcess
+      }).underlyingActor
+      val stubProcess = mock[Process]
+      val stubUntailed = new UntailedWriter(jobPaths.stdout) with MockPathWriter
+      val stubTailed = new TailedWriter(jobPaths.stderr, 100) with MockPathWriter
+
+      when(sparkProcess.externalProcess(any[Seq[String]], any[ProcessLogger])).thenReturn(stubProcess)
+      when(stubProcess.exitValue()).thenReturn(0)
+      when(sparkProcess.tailedWriter(any[Int], any[Path])).thenReturn(stubTailed)
+      when(sparkProcess.untailedWriter(any[Path])).thenReturn(stubUntailed)
+
+      whenReady(backend.execute, timeout) { response =>
+        response shouldBe a[SucceededResponse]
+        verify(sparkProcess, times(1)).externalProcess(any[Seq[String]], any[ProcessLogger])
+        verify(sparkProcess, times(1)).tailedWriter(any[Int], any[Path])
+        verify(sparkProcess, times(1)).untailedWriter(any[Path])
+      }
+
+      cleanUpJob(jobPaths)
     }
-    write(file.toFile, contents)
+
   }
 
   private def write(file: File, contents: String) = {
@@ -247,18 +213,16 @@ class SparkJobExecutionActorSpec extends TestKit(ActorSystem("SparkJobExecutionA
 
   private def cleanUpJob(jobPaths: JobPaths): Unit = jobPaths.workflowRoot.delete(true)
 
-  private def prepareJob(source: String = helloWorldWdl, runtimeString: String = "", inputFiles: Option[Map[String, WdlValue]] = None): TestJobDescriptor = {
-    val backendWorkflowDescriptor = buildWorkflowDescriptor(wdl = source, inputs = inputFiles.getOrElse(Map.empty), runtime = runtimeString)
+  private def prepareJob(wdlSource: WdlSource = helloWorldWdl, runtimeString: String = passOnStderr, inputFiles: Option[Map[String, WdlValue]] = None): TestJobDescriptor = {
+    val backendWorkflowDescriptor = buildWorkflowDescriptor(wdl = wdlSource, inputs = inputFiles.getOrElse(Map.empty), runtime = runtimeString)
     val backendConfigurationDescriptor = BackendConfigurationDescriptor(backendConfig, ConfigFactory.load)
     val jobDesc = jobDescriptorFromSingleCallWorkflow(backendWorkflowDescriptor, inputFiles.getOrElse(Map.empty))
     val jobPaths = new JobPaths(backendWorkflowDescriptor, backendConfig, jobDesc.key)
     val executionDir = jobPaths.callRoot
     val stdout = Paths.get(executionDir.path.toString, "stdout")
     stdout.toString.toFile.createIfNotExists(false)
-    val submitFileStderr = executionDir.resolve("process.stderr")
-    val submitFileStdout = executionDir.resolve("process.stdout")
-    submitFileStdout.toString.toFile.createIfNotExists(false)
-    submitFileStderr.toString.toFile.createIfNotExists(false)
+    val stderr = Paths.get(executionDir.path.toString, "stderr")
+    stderr.toString.toFile.createIfNotExists(false)
     TestJobDescriptor(jobDesc, jobPaths, backendConfigurationDescriptor)
   }
 
