@@ -3,7 +3,7 @@ package cromwell.backend.impl.spark
 import java.nio.file.FileSystems
 import java.nio.file.attribute.PosixFilePermission
 
-import akka.actor.Props
+import akka.actor.{PoisonPill, Props}
 import cromwell.backend.BackendJobExecutionActor.{BackendJobExecutionResponse, FailedNonRetryableResponse, SucceededResponse}
 import cromwell.backend.io.{JobPaths, SharedFileSystem, SharedFsExpressionFunctions}
 import cromwell.backend.{BackendConfigurationDescriptor, BackendJobDescriptor, BackendJobExecutionActor}
@@ -121,9 +121,10 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
       }
 
       log.debug("{} Creating bash script for executing command: {}", tag, command)
+      //TODO: we should use shapeless Heterogeneous list here not good to have generic map
       val attributes: Map[String, Any] = Map(
         SparkCommands.APP_MAIN_CLASS -> runtimeAttributes.appMainClass,
-        SparkCommands.DEPLOY_MODE -> runtimeAttributes.deployMode.get,
+        SparkCommands.DEPLOY_MODE -> runtimeAttributes.deployMode,
         SparkCommands.MASTER -> runtimeAttributes.sparkMaster.get,
         SparkCommands.EXECUTOR_CORES -> runtimeAttributes.executorCores,
         SparkCommands.EXECUTOR_MEMORY -> runtimeAttributes.executorMemory.to(MemoryUnit.GB).amount.toLong,
@@ -135,7 +136,7 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
     } catch {
       case ex: Exception =>
         log.error(ex, "Failed to prepare task: " + ex.getMessage)
-        throw ex
+        FailedNonRetryableResponse(jobDescriptor.key, ex, None)
     }
   }
 
