@@ -44,12 +44,21 @@ class SparkCommands extends StrictLogging {
       case Failure(ex) => logger.warn(s"Spark home does not exist picking up default command")
         None
     }
+
     val sparkSubmit = sparkHome
       .map(p => String.format("%s%s", p, s"/bin/$SPARK_SUBMIT"))
       .getOrElse(SPARK_SUBMIT)
-    val sparkCmd = stringBuilder.append(sparkSubmit).append(commandPlaceHolder.format(SEPARATOR, MASTER, attributes(MASTER)))
-      .append(commandPlaceHolder.format(SEPARATOR, DEPLOY_MODE, attributes(DEPLOY_MODE)))
-      .append(commandPlaceHolder.format(SEPARATOR, APP_MAIN_CLASS, attributes(APP_MAIN_CLASS)))
+
+    val sb = stringBuilder.append(sparkSubmit).append(commandPlaceHolder.format(SEPARATOR, MASTER, attributes(MASTER)))
+
+    attributes.foreach {
+      case (key, _) => attributes.get(key) match {
+        case Some (v) => commandPlaceHolder.format (SEPARATOR, key, v)
+        case None => logger.warn (s" key: $key doesn't exit spark should pick it")
+     }
+    }
+
+    val sparkCmd = sb.append(commandPlaceHolder.format(SEPARATOR, APP_MAIN_CLASS, attributes(APP_MAIN_CLASS)))
       .append(commandPlaceHolder.format(SEPARATOR, EXECUTOR_CORES, attributes(EXECUTOR_CORES)))
       .append(commandPlaceHolder.format(SEPARATOR, EXECUTOR_MEMORY, "%s%s".format(attributes(EXECUTOR_MEMORY), MEMORY_UNIT)))
       .append(attributes(SPARK_APP_WITH_ARGS)).toString

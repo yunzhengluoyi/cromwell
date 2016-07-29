@@ -33,7 +33,7 @@ class SparkRuntimeAttributesSpec extends WordSpecLike with Matchers {
 
   val emptyWorkflowOptions = WorkflowOptions(JsObject(Map.empty[String, JsValue]))
 
-  val staticDefaults = SparkRuntimeAttributes(1, MemorySize.parse("1 GB").get, None, "com.test.spark" , Some("client"), Some("local"), false)
+  val staticDefaults = SparkRuntimeAttributes(1, MemorySize.parse("1 GB").get, None, "com.test.spark" , None, Some("local"), false)
 
   def workflowOptionsWithDefaultRA(defaults: Map[String, JsValue]) = {
     WorkflowOptions(JsObject(Map(

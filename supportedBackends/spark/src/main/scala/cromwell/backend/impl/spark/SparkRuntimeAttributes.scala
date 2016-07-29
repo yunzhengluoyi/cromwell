@@ -16,7 +16,6 @@ object SparkRuntimeAttributes {
   private val FailOnStderrDefaultValue = false
   private val ExecutorCoresDefaultValue = 1
   private val ExecutorMemoryDefaultValue = "1 GB"
-  private val SparkDeployModeDefaultValue = "client"
   private val SparkMasterDefaultValue = "local"
 
   val ExecutorCoresKey = "executorCores"
@@ -31,7 +30,6 @@ object SparkRuntimeAttributes {
     FailOnStderrKey -> WdlBoolean(FailOnStderrDefaultValue),
     ExecutorCoresKey -> WdlInteger(ExecutorCoresDefaultValue),
     ExecutorMemoryKey -> WdlString(ExecutorMemoryDefaultValue),
-    SparkDeployMode -> WdlString(SparkDeployModeDefaultValue),
     SparkMaster -> WdlString(SparkMasterDefaultValue)
   )
 
