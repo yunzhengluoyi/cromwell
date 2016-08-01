@@ -136,13 +136,17 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
     } catch {
       case ex: Exception =>
         log.error(ex, "Failed to prepare task: " + ex.getMessage)
-        FailedNonRetryableResponse(jobDescriptor.key, ex, None)
+        throw ex
     }
   }
 
   private def prepareAndExecute: Unit = {
-    createExecutionFolderAndScript()
-    executionResponse success executeTask()
+    Try {
+      createExecutionFolderAndScript()
+      executionResponse success executeTask()
+    } recover {
+      case exception => executionResponse success  FailedNonRetryableResponse(jobDescriptor.key, exception, None)
+    }
   }
 
 }
