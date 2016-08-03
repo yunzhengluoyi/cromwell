@@ -3,7 +3,7 @@ package cromwell.backend.impl.spark
 import java.nio.file.FileSystems
 import java.nio.file.attribute.PosixFilePermission
 
-import akka.actor.{PoisonPill, Props}
+import akka.actor.{Props}
 import cromwell.backend.BackendJobExecutionActor.{BackendJobExecutionResponse, FailedNonRetryableResponse, SucceededResponse}
 import cromwell.backend.io.{JobPaths, SharedFileSystem, SharedFsExpressionFunctions}
 import cromwell.backend.{BackendConfigurationDescriptor, BackendJobDescriptor, BackendJobExecutionActor}
@@ -77,7 +77,7 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
   }
 
   private def executeTask(): BackendJobExecutionResponse = {
-    val argv = Seq(scriptPath.toString)
+    val argv = Seq(SparkCommands.SHELL_CMD, scriptPath.toString)
     val process = extProcess.externalProcess(argv, ProcessLogger(stdoutWriter.writeWithNewline, stderrWriter.writeWithNewline))
     val jobReturnCode = Try(process.exitValue()) // blocks until process (i.e. spark submission) finishes
     log.debug("{} Return code of spark submit command: {}", tag, jobReturnCode)
