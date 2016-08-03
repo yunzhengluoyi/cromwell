@@ -19,6 +19,7 @@ object SparkCommands {
   val DEPLOY_MODE = "deploy-mode"
   val SPARK_APP_WITH_ARGS = "spark_app_with_args"
   val MEMORY_UNIT = "g" //Accepts only GB
+  val SHELL_CMD = "sh"
 }
 
 class SparkCommands extends StrictLogging {
