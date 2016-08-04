@@ -32,7 +32,7 @@ class RuntimeAttributesDefaultSpec extends FlatSpec with Matchers {
 
     val defaults = workflowOptionsDefault(workflowOptions, coercionMap)
     defaults.isSuccess shouldBe true
-    defaults.get should contain theSameElementsAs Map(
+    defaults.toOption.get should contain theSameElementsAs Map(
       "str" -> WdlString("myString"),
       "bool" -> WdlBoolean.True,
       "number" -> WdlInteger(8),
@@ -52,7 +52,7 @@ class RuntimeAttributesDefaultSpec extends FlatSpec with Matchers {
 
     val defaults = workflowOptionsDefault(workflowOptions, coercionMap)
     defaults.isSuccess shouldBe true
-    defaults.get should contain theSameElementsAs Map(
+    defaults.toOption.get should contain theSameElementsAs Map(
       "str" -> WdlString("myString"),
       "number" -> WdlInteger(8)
     )
@@ -63,7 +63,7 @@ class RuntimeAttributesDefaultSpec extends FlatSpec with Matchers {
 
     val defaults = workflowOptionsDefault(workflowOptions, Map.empty)
     defaults.isSuccess shouldBe true
-    defaults.get shouldBe empty
+    defaults.toOption.get shouldBe empty
   }
 
   it should "throw an exception if a value can't be coerced" in {
@@ -80,7 +80,7 @@ class RuntimeAttributesDefaultSpec extends FlatSpec with Matchers {
 
     val defaults = workflowOptionsDefault(workflowOptions, coercionMap)
     defaults.isFailure shouldBe true
-    defaults.failed.get.getMessage shouldBe s"Could not parse JsonValue ${map("str")} to valid WdlValue for runtime attribute str"
+    defaults.swap.toOption.get.head shouldBe s"Could not parse JsonValue ${map("str")} to valid WdlValue for runtime attribute str"
   }
 
   it should "fold default values" in {

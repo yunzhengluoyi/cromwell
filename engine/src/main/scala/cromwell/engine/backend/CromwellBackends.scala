@@ -2,9 +2,13 @@ package cromwell.engine.backend
 
 import akka.actor.ActorSystem
 import cromwell.backend.BackendLifecycleActorFactory
+import cromwell.core.{ErrorOr, WorkflowOptions}
+import wdl4s.values.WdlValue
 
 import scala.language.postfixOps
-import scala.util.{Success, Try, Failure}
+import scala.util.{Failure, Success, Try}
+import scalaz._
+import Scalaz._
 
 /**
   * Provides a global singleton access to the instantiated backend factories.
@@ -21,6 +25,13 @@ case class CromwellBackends(backendEntries: List[BackendConfigurationEntry]) {
   }
 
   def isValidBackendName(name: String): Boolean = backendLifecycleActorFactories.contains(name)
+
+  def coercedRuntimeAttributes(backendName: String, options: WorkflowOptions): ErrorOr[Map[String, WdlValue]] = {
+    backendLifecycleActorFactoryByName(backendName) match {
+      case Failure(t) => t.getMessage.failureNel
+      case Success(f) => f.coerceDefaultRuntimeAttributes(options)
+    }
+  }
 }
 
 object CromwellBackends {

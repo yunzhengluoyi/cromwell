@@ -40,6 +40,8 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
+import scalaz._
+import Scalaz._
 
 case class TestBackendLifecycleActorFactory(configurationDescriptor: BackendConfigurationDescriptor) extends BackendLifecycleActorFactory {
   override def workflowInitializationActorProps(workflowDescriptor: BackendWorkflowDescriptor,
@@ -57,6 +59,8 @@ case class TestBackendLifecycleActorFactory(configurationDescriptor: BackendConf
                                            initializationData: Option[BackendInitializationData]): WdlStandardLibraryFunctions = {
     NoFunctions
   }
+
+  override def coerceDefaultRuntimeAttributes(options: WorkflowOptions): ErrorOr[Map[String, WdlValue]] = Map.empty[String, WdlValue].successNel
 }
 
 case class OutputNotFoundException(outputFqn: String, actualOutputs: String) extends RuntimeException(s"Expected output $outputFqn was not found in: '$actualOutputs'")

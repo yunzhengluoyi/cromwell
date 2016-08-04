@@ -79,8 +79,7 @@ object JesRuntimeAttributes {
   )
 
   def apply(attrs: Map[String, WdlValue], options: WorkflowOptions, logger: Logger): JesRuntimeAttributes = {
-    val defaultsFromOptions = workflowOptionsDefault(options, coercionMap).get
-    val withDefaultValues = withDefaults(attrs, List(defaultsFromOptions, staticDefaults))
+    val withDefaultValues = withDefaults(attrs, List(staticDefaults))
 
     warnUnrecognized(withDefaultValues.keySet, coercionMap.keySet, logger)
 
@@ -94,12 +93,15 @@ object JesRuntimeAttributes {
     val preemptible = validatePreemptible(withDefaultValues(PreemptibleKey))
     val bootDiskSize = validateBootDisk(withDefaultValues(BootDiskSizeKey))
     val disks = validateLocalDisks(withDefaultValues(DisksKey))
-    (cpu |@| zones |@| preemptible |@| bootDiskSize |@| memory |@| disks |@| docker |@| failOnStderr |@| continueOnReturnCode) {
+    val validatedRuntimeAttributes = (cpu |@| zones |@| preemptible |@| bootDiskSize |@| memory |@| disks |@| docker |@| failOnStderr |@| continueOnReturnCode) {
       new JesRuntimeAttributes(_, _, _, _, _, _, _, _, _)
-    } match {
+    }
+
+    validatedRuntimeAttributes match {
       case Success(x) => x
       case Failure(nel) => throw new RuntimeException with MessageAggregation {
         override def exceptionContext: String = "Runtime attribute validation failed"
+
         override def errorMessages: Traversable[String] = nel.list
       }
     }

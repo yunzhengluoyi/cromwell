@@ -5,10 +5,12 @@ import java.nio.file.Path
 import akka.actor.{ActorRef, Props}
 import com.typesafe.config.Config
 import cromwell.backend._
+import cromwell.backend.validation.RuntimeAttributesDefault
 import cromwell.core.Dispatcher.BackendDispatcher
-import cromwell.core.{ExecutionStore, OutputStore}
+import cromwell.core.{ErrorOr, ExecutionStore, OutputStore, WorkflowOptions}
 import wdl4s.Call
 import wdl4s.expression.WdlStandardLibraryFunctions
+import wdl4s.values.WdlValue
 
 import scala.language.postfixOps
 
@@ -54,5 +56,9 @@ case class JesBackendLifecycleActorFactory(configurationDescriptor: BackendConfi
   override def getExecutionRootPath(workflowDescriptor: BackendWorkflowDescriptor, backendConfig: Config,
                                     initializationData: Option[BackendInitializationData]): Path = {
     initializationData.toJes.workflowPaths.rootPath
+  }
+
+  override def coerceDefaultRuntimeAttributes(options: WorkflowOptions): ErrorOr[Map[String, WdlValue]] = {
+    RuntimeAttributesDefault.workflowOptionsDefault(options, JesRuntimeAttributes.coercionMap)
   }
 }

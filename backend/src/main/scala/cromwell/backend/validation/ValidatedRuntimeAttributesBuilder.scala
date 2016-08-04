@@ -51,15 +51,16 @@ trait ValidatedRuntimeAttributesBuilder {
   def build(attrs: Map[String, WdlValue], options: WorkflowOptions, logger: Logger): ValidatedRuntimeAttributes = {
     import RuntimeAttributesDefault._
 
+    val runtimeAttributes = for {
+      defaultFromOptions <- workflowOptionsDefault(options, coercionMap)
+      withDefaultValues = withDefaults(attrs, List(defaultFromOptions, staticDefaults))
+      _ = RuntimeAttributesValidation.warnUnrecognized(withDefaultValues.keySet, validationKeys.toSet, logger)
+      attributes <- validate(withDefaultValues)
+    } yield attributes
+
     // Fail now if some workflow options are specified but can't be parsed correctly
-    val defaultFromOptions = workflowOptionsDefault(options, coercionMap).get
-    val withDefaultValues: Map[String, WdlValue] = withDefaults(attrs, List(defaultFromOptions, staticDefaults))
-
-    RuntimeAttributesValidation.warnUnrecognized(withDefaultValues.keySet, validationKeys.toSet, logger)
-
-    val runtimeAttributesErrorOr: ErrorOr[ValidatedRuntimeAttributes] = validate(withDefaultValues)
-    runtimeAttributesErrorOr match {
-      case Success(runtimeAttributes) => runtimeAttributes
+    runtimeAttributes match {
+      case Success(attributes) => attributes
       case Failure(nel) => throw new RuntimeException with MessageAggregation {
         override def exceptionContext: String = "Runtime attribute validation failed"
 

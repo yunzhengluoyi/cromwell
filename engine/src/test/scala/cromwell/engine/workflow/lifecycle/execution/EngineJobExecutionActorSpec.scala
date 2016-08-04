@@ -7,7 +7,7 @@ import akka.testkit.{TestFSMRef, TestProbe}
 import cromwell.CromwellTestkitSpec
 import cromwell.backend.BackendJobExecutionActor._
 import cromwell.backend._
-import cromwell.core.{ExecutionStore, JobOutputs, OutputStore, WorkflowId}
+import cromwell.core._
 import cromwell.database.CromwellDatabase
 import cromwell.engine.workflow.WorkflowDescriptorBuilder
 import cromwell.engine.workflow.lifecycle.execution.EngineJobExecutionActor._
@@ -19,7 +19,10 @@ import cromwell.util.SampleWdl
 import org.scalatest.{BeforeAndAfterAll, Matchers}
 import org.specs2.mock.Mockito
 import wdl4s.expression.{NoFunctions, WdlStandardLibraryFunctions}
+import wdl4s.values.WdlValue
 import wdl4s.{Call, Task}
+import scalaz._
+import Scalaz._
 
 class EngineJobExecutionActorSpec extends CromwellTestkitSpec with Matchers with WorkflowDescriptorBuilder with Mockito with BeforeAndAfterAll {
 
@@ -44,6 +47,8 @@ class EngineJobExecutionActorSpec extends CromwellTestkitSpec with Matchers with
     override def expressionLanguageFunctions(workflowDescriptor: BackendWorkflowDescriptor, jobKey: BackendJobDescriptorKey, initializationData: Option[BackendInitializationData]): WdlStandardLibraryFunctions = {
       NoFunctions
     }
+
+    override def coerceDefaultRuntimeAttributes(options: WorkflowOptions): ErrorOr[Map[String, WdlValue]] = Map.empty[String, WdlValue].successNel
   }
 
   def buildEJEA(restarting: Boolean) = {
@@ -104,8 +109,6 @@ class EngineJobExecutionActorSpec extends CromwellTestkitSpec with Matchers with
       ejea.setState(CheckingJobStore)
       val task = mock[Task]
       task.declarations returns Seq.empty
-
-      val call = Call(None, "wf.call", task, Set.empty, Map.empty, None)
 
       ejea ! JobNotComplete
 

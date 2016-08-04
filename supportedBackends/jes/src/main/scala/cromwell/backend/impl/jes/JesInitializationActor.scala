@@ -60,12 +60,7 @@ class JesInitializationActor(override val workflowDescriptor: BackendWorkflowDes
     } yield GcsLocalizing(clientSecrets, token)
   }
 
-  private val iOExecutionContext = context.system.dispatchers.lookup(IoDispatcher)
-
-
-  override protected def coerceDefaultRuntimeAttributes(options: WorkflowOptions): Try[Map[String, WdlValue]] = {
-    RuntimeAttributesDefault.workflowOptionsDefault(options, JesRuntimeAttributes.coercionMap)
-  }
+  private val ioExecutionContext = context.system.dispatchers.lookup(IoDispatcher)
 
   /**
     * A call which happens before anything else runs
@@ -81,7 +76,7 @@ class JesInitializationActor(override val workflowDescriptor: BackendWorkflowDes
     def buildGcsFileSystem: Future[GcsFileSystem] = Future {
       val storage = jesConfiguration.jesAttributes.gcsFilesystemAuth.buildStorage(
         workflowDescriptor.workflowOptions.toGoogleAuthOptions, jesConfiguration.googleConfig)
-      GcsFileSystem(GcsFileSystemProvider(storage)(iOExecutionContext))
+      GcsFileSystem(GcsFileSystemProvider(storage)(ioExecutionContext))
     }
 
     for {

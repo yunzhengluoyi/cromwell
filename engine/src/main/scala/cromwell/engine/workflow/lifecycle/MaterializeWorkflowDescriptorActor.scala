@@ -80,7 +80,7 @@ class MaterializeWorkflowDescriptorActor(serviceRegistryActor: ActorRef, val wor
 
   val tag = self.path.name
 
-  val iOExecutionContext = context.system.dispatchers.lookup("akka.dispatchers.io-dispatcher")
+  val ioExecutionContext = context.system.dispatchers.lookup("akka.dispatchers.io-dispatcher")
 
   startWith(ReadyToMaterializeState, MaterializeWorkflowDescriptorActorData())
 
@@ -130,7 +130,7 @@ class MaterializeWorkflowDescriptorActor(serviceRegistryActor: ActorRef, val wor
     (namespaceValidation |@| workflowOptionsValidation) {
       (_, _)
     } flatMap { case (namespace, workflowOptions) =>
-      val engineFileSystems = EngineFilesystems.filesystemsForWorkflow(workflowOptions)(iOExecutionContext)
+      val engineFileSystems = EngineFilesystems.filesystemsForWorkflow(workflowOptions)(ioExecutionContext)
       buildWorkflowDescriptor(id, sourceFiles, namespace, workflowOptions, conf, engineFileSystems)
     }
   }
@@ -173,12 +173,58 @@ class MaterializeWorkflowDescriptorActor(serviceRegistryActor: ActorRef, val wor
       }).toList.sequence[ErrorOr, (FullyQualifiedName, WdlValue)].map(_.toMap)
     }
 
+    // NOTE: `validateBackendAssignments` currently never assigns two calls with the same underlying task to different
+    // backends.  The logic below that pushes default runtime attributes into tasks that are otherwise missing these attributes
+    // relies on this fact, since default runtime attributes are applied at the level of tasks and not calls. This assignment
+    // logic needs to know the backend on which a task will run in order to coerce default runtime attributes appropriately.
+    val tasksToBackends: Map[Task, String] = backendAssignments map { case (call, name) => call.task -> name }
+    val backendsToDefaults: Map[String, ErrorOr[Map[String, WdlValue]]] = tasksToBackends.values.toSet map { b: String => b -> cromwellBackends.coercedRuntimeAttributes(b, workflowOptions) } toMap
+    type DefaultAttributes = Map[String, WdlValue]
+    // Map "composition" http://stackoverflow.com/questions/13570216/composing-two-maps
+    val tasksToDefaults: Map[Task, ErrorOr[DefaultAttributes]] = tasksToBackends.keys map { k => k -> (tasksToBackends andThen backendsToDefaults)(k) } toMap
+
+    // Can't figure out a nicer way to Scalaz this.  There is a `Traverse` instance for `Map` but there seem to be
+    // type inference issues: https://github.com/scalaz/scalaz/issues/626
+    //
+    // This cheats and does a Map -> List[Tuple2] -> Map.
+    val listOfErrorOrs: List[ErrorOr[(Task, DefaultAttributes)]] = tasksToDefaults.toList.map { case (t, ea) => ea.map { a => t -> a } }
+    val tasksToDefaultAttributes: ErrorOr[Map[Task, DefaultAttributes]] = listOfErrorOrs.sequence[ErrorOr, (Task, DefaultAttributes)] map { _.toMap }
+
+    def updateTaskWithDefaultAttributes(task: Task, defaultAttributes: DefaultAttributes): Task = {
+      defaultAttributes.foldLeft(task) { case (t, (attr, value)) =>
+        val attrs = t.runtimeAttributes.attrs
+        if (!attrs.contains(attr)) {
+          val withAddedAttribute = attrs + (attr -> WdlExpression.fromString(value.toWdlString))
+          t.copy(runtimeAttributes = RuntimeAttributes(withAddedAttribute))
+        } else t
+      }
+    }
+
+    def updateTasksInWorkflow(original: Workflow, callsToUpdatedCalls: Map[Call, Call]): Workflow = {
+      class UpdatedTasksWorkflow extends Workflow(original.unqualifiedName, original.declarations, original.workflowOutputDecls) {
+        override val children = original.children.map {
+          case c: Call => callsToUpdatedCalls(c)
+          case o => o
+        }
+      }
+      new UpdatedTasksWorkflow
+    }
+
+    def updateNamespace(namespace: NamespaceWithWorkflow, tasksToUpdatedTasks: Map[Task, Task], callsToUpdatedCalls: Map[Call, Call]): NamespaceWithWorkflow = {
+      namespace.copy(tasks = tasksToUpdatedTasks.values.toSeq).copy(workflow = updateTasksInWorkflow(namespace.workflow, callsToUpdatedCalls))
+    }
+
     for {
       coercedInputs <- validateCoercedInputs(rawInputs, namespace)
-      declarations <- validateDeclarations(namespace, workflowOptions, coercedInputs, engineFileSystems)
+      tasksToDefaults <- tasksToDefaultAttributes
+      tasksToUpdatedTasks = tasksToDefaults map { case (t, d) => t -> updateTaskWithDefaultAttributes(t, d) }
+      callsToUpdatedCalls = (backendAssignments.keys map { c => c -> c.copy(task = tasksToUpdatedTasks(c.task)) }).toMap
+      updatedNamespace = updateNamespace(namespace, tasksToUpdatedTasks, callsToUpdatedCalls)
+      declarations <- validateDeclarations(updatedNamespace, workflowOptions, coercedInputs, engineFileSystems)
       declarationsAndInputs <- checkTypes(declarations ++ coercedInputs)
-      backendDescriptor = BackendWorkflowDescriptor(id, namespace, declarationsAndInputs, workflowOptions)
-    } yield EngineWorkflowDescriptor(backendDescriptor, coercedInputs, backendAssignments, failureMode, engineFileSystems, callCachingMode)
+      backendDescriptor = BackendWorkflowDescriptor(id, updatedNamespace, declarationsAndInputs, workflowOptions)
+      updatedBackendAssignments = backendAssignments map { case (k, v) => callsToUpdatedCalls(k) -> v }
+    } yield EngineWorkflowDescriptor(backendDescriptor, coercedInputs, updatedBackendAssignments, failureMode, engineFileSystems, callCachingMode)
   }
 
   private def validateBackendAssignments(calls: Seq[Call], workflowOptions: WorkflowOptions, defaultBackendName: Option[String]): ErrorOr[Map[Call, String]] = {

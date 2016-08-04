@@ -1,19 +1,17 @@
 package cromwell.backend.validation
 
-import cromwell.core.{OptionNotFoundException, EvaluatedRuntimeAttributes, WorkflowOptions}
+import cromwell.core.{ErrorOr, EvaluatedRuntimeAttributes, OptionNotFoundException, WorkflowOptions}
 import wdl4s.types.WdlType
 import wdl4s.util.TryUtil
 import wdl4s.values.WdlValue
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success}
 import scalaz.Scalaz._
-import scalaz.ValidationNel
 
 object RuntimeAttributesDefault {
 
-  def workflowOptionsDefault(options: WorkflowOptions, mapping: Map[String, Traversable[WdlType]]):
-  Try[Map[String, WdlValue]] = {
-    options.defaultRuntimeOptions flatMap { attrs =>
+  def workflowOptionsDefault(options: WorkflowOptions, mapping: Map[String, Traversable[WdlType]]): ErrorOr[Map[String, WdlValue]] = {
+    val tryMap = options.defaultRuntimeOptions flatMap { attrs =>
       TryUtil.sequenceMap(attrs collect {
         case (k, v) if mapping.contains(k) =>
           val maybeTriedValue = mapping(k) map {  _.coerceRawValue(v) } find { _.isSuccess } getOrElse {
@@ -21,8 +19,12 @@ object RuntimeAttributesDefault {
           }
           k -> maybeTriedValue
       })
-    } recover {
-      case _: OptionNotFoundException => Map.empty[String, WdlValue]
+    }
+
+    tryMap match {
+      case Success(m) => m.successNel
+      case Failure(t: OptionNotFoundException) => Map.empty[String, WdlValue].successNel
+      case Failure(t) => t.getMessage.failureNel
     }
   }
 
@@ -35,5 +37,5 @@ object RuntimeAttributesDefault {
     })
   }
 
-  def noValueFoundFor[A](attribute: String): ValidationNel[String, A] = s"Can't find an attribute value for key $attribute".failureNel
+  def noValueFoundFor[A](attribute: String): ErrorOr[A] = s"Can't find an attribute value for key $attribute".failureNel
 }

@@ -45,21 +45,23 @@ object HtCondorRuntimeAttributes {
 
   def apply(attrs: Map[String, WdlValue], options: WorkflowOptions): HtCondorRuntimeAttributes = {
     // Fail now if some workflow options are specified but can't be parsed correctly
-    val defaultFromOptions = workflowOptionsDefault(options, coercionMap).get
-    val withDefaultValues = withDefaults(attrs, List(defaultFromOptions, staticDefaults))
+    val q = workflowOptionsDefault(options, coercionMap) map { defaultFromOptions =>
+      val withDefaultValues = withDefaults(attrs, List(defaultFromOptions, staticDefaults))
 
-    val docker = validateDocker(withDefaultValues.get(DockerKey), None.successNel)
-    val dockerWorkingDir = validateDockerWorkingDir(withDefaultValues.get(DockerWorkingDirKey), None.successNel)
-    val dockerOutputDir = validateDockerOutputDir(withDefaultValues.get(DockerOutputDirKey), None.successNel)
-    val failOnStderr = validateFailOnStderr(withDefaultValues.get(FailOnStderrKey), noValueFoundFor(FailOnStderrKey))
-    val continueOnReturnCode = validateContinueOnReturnCode(withDefaultValues.get(ContinueOnReturnCodeKey), noValueFoundFor(ContinueOnReturnCodeKey))
-    val cpu = validateCpu(withDefaultValues.get(CpuKey), noValueFoundFor(CpuKey))
-    val memory = validateMemory(withDefaultValues.get(MemoryKey), noValueFoundFor(MemoryKey))
-    val disk = validateDisk(withDefaultValues.get(DiskKey), noValueFoundFor(DiskKey))
+      val docker = validateDocker(withDefaultValues.get(DockerKey), None.successNel)
+      val dockerWorkingDir = validateDockerWorkingDir(withDefaultValues.get(DockerWorkingDirKey), None.successNel)
+      val dockerOutputDir = validateDockerOutputDir(withDefaultValues.get(DockerOutputDirKey), None.successNel)
+      val failOnStderr = validateFailOnStderr(withDefaultValues.get(FailOnStderrKey), noValueFoundFor(FailOnStderrKey))
+      val continueOnReturnCode = validateContinueOnReturnCode(withDefaultValues.get(ContinueOnReturnCodeKey), noValueFoundFor(ContinueOnReturnCodeKey))
+      val cpu = validateCpu(withDefaultValues.get(CpuKey), noValueFoundFor(CpuKey))
+      val memory = validateMemory(withDefaultValues.get(MemoryKey), noValueFoundFor(MemoryKey))
+      val disk = validateDisk(withDefaultValues.get(DiskKey), noValueFoundFor(DiskKey))
 
-    (continueOnReturnCode |@| docker |@| dockerWorkingDir |@| dockerOutputDir |@| failOnStderr |@| cpu |@| memory |@| disk) {
-      new HtCondorRuntimeAttributes(_, _, _, _, _, _, _, _)
-    } match {
+      (continueOnReturnCode |@| docker |@| dockerWorkingDir |@| dockerOutputDir |@| failOnStderr |@| cpu |@| memory |@| disk) {
+        new HtCondorRuntimeAttributes(_, _, _, _, _, _, _, _)
+      }
+    } flatMap identity
+    q match {
       case Success(x) => x
       case Failure(nel) => throw new RuntimeException with MessageAggregation {
         override def exceptionContext: String = "Runtime attribute validation failed"

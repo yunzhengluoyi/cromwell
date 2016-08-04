@@ -7,9 +7,11 @@ import cromwell.backend._
 import cromwell.backend.impl.htcondor.caching.CacheActorFactory
 import cromwell.backend.io.JobPaths
 import cromwell.backend.sfs.SharedFileSystemExpressionFunctions
-import cromwell.core.{CallContext, WorkflowOptions}
+import cromwell.backend.validation.RuntimeAttributesDefault
+import cromwell.core.{CallContext, ErrorOr, WorkflowOptions}
 import wdl4s.Call
 import wdl4s.expression.WdlStandardLibraryFunctions
+import wdl4s.values.WdlValue
 
 import scala.util.{Failure, Success, Try}
 
@@ -65,6 +67,10 @@ case class HtCondorBackendFactory(configurationDescriptor: BackendConfigurationD
       }
       case Failure(_) => defaultValue
     }
+  }
+
+  override def coerceDefaultRuntimeAttributes(options: WorkflowOptions): ErrorOr[Map[String, WdlValue]] = {
+    RuntimeAttributesDefault.workflowOptionsDefault(options, HtCondorRuntimeAttributes.coercionMap)
   }
 }
 

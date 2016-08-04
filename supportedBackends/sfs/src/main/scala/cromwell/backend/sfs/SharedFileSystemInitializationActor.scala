@@ -3,11 +3,9 @@ package cromwell.backend.sfs
 import akka.actor.ActorRef
 import better.files._
 import cromwell.backend.io.{WorkflowPaths, WorkflowPathsBackendInitializationData}
-import cromwell.backend.validation.RuntimeAttributesDefault
 import cromwell.backend.wfs.{DefaultWorkflowFileSystemProvider, WorkflowFileSystemProvider}
 import cromwell.backend.{BackendConfigurationDescriptor, BackendInitializationData, BackendWorkflowDescriptor, BackendWorkflowInitializationActor}
-import cromwell.core.{Dispatcher, WorkflowOptions}
-import wdl4s.values.WdlValue
+import cromwell.core.Dispatcher
 import wdl4s.{Call, WdlExpression}
 
 import scala.concurrent.Future
@@ -18,7 +16,8 @@ case class SharedFileSystemInitializationActorParams
   serviceRegistryActor: ActorRef,
   workflowDescriptor: BackendWorkflowDescriptor,
   configurationDescriptor: BackendConfigurationDescriptor,
-  calls: Seq[Call]
+  calls: Seq[Call],
+  runtimeAttributesBuilder: SharedFileSystemValidatedRuntimeAttributesBuilder
 )
 
 class SharedFileSystemBackendInitializationData
@@ -40,11 +39,8 @@ class SharedFileSystemInitializationActor(params: SharedFileSystemInitialization
   override lazy val calls: Seq[Call] = params.calls
   override lazy val serviceRegistryActor: ActorRef = params.serviceRegistryActor
 
-  def runtimeAttributesBuilder: SharedFileSystemValidatedRuntimeAttributesBuilder =
-    SharedFileSystemValidatedRuntimeAttributesBuilder.default
-
   override protected def runtimeAttributeValidators: Map[String, (Option[WdlExpression]) => Boolean] = {
-    runtimeAttributesBuilder.validations.map(validation =>
+    params.runtimeAttributesBuilder.validations.map(validation =>
       validation.key -> validation.validateOptionalExpression _
     ).toMap
   }
@@ -64,7 +60,7 @@ class SharedFileSystemInitializationActor(params: SharedFileSystemInitialization
   }
 
   def initializationData: SharedFileSystemBackendInitializationData = {
-    new SharedFileSystemBackendInitializationData(workflowPaths, runtimeAttributesBuilder)
+    new SharedFileSystemBackendInitializationData(workflowPaths, params.runtimeAttributesBuilder)
   }
 
   /**
@@ -74,7 +70,7 @@ class SharedFileSystemInitializationActor(params: SharedFileSystemInitialization
     Future.fromTry(Try {
       calls foreach { call =>
         val runtimeAttributeKeys = call.task.runtimeAttributes.attrs.keys.toList
-        val notSupportedAttributes = runtimeAttributesBuilder.unsupportedKeys(runtimeAttributeKeys).toList
+        val notSupportedAttributes = params.runtimeAttributesBuilder.unsupportedKeys(runtimeAttributeKeys).toList
 
         if (notSupportedAttributes.nonEmpty) {
           val notSupportedAttrString = notSupportedAttributes mkString ", "
@@ -84,9 +80,5 @@ class SharedFileSystemInitializationActor(params: SharedFileSystemInitialization
         }
       }
     })
-  }
-
-  override protected def coerceDefaultRuntimeAttributes(options: WorkflowOptions): Try[Map[String, WdlValue]] = {
-    RuntimeAttributesDefault.workflowOptionsDefault(options, runtimeAttributesBuilder.validations.map(v => v.key -> v.coercion).toMap)
   }
 }

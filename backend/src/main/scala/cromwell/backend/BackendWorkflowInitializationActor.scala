@@ -91,8 +91,6 @@ trait BackendWorkflowInitializationActor extends BackendWorkflowLifecycleActor w
     serviceRegistryActor ! PutMetadataAction(MetadataEvent(MetadataKey(workflowDescriptor.id, None, WorkflowMetadataKeys.WorkflowRoot), MetadataValue(workflowRoot)))
   }
 
-  protected def coerceDefaultRuntimeAttributes(options: WorkflowOptions): Try[Map[String, WdlValue]]
-
   /**
     * This method calls into `runtimeAttributeValidators` to validate runtime attribute expressions.
     * The initialization-time validators try to fully `evaluate` (not `evaluateType`) the runtime attribute expression.
@@ -127,28 +125,18 @@ trait BackendWorkflowInitializationActor extends BackendWorkflowLifecycleActor w
     *   repeated when the various `FooRuntimeAttributes` classes are created, in the spirit of #1076.
     */
   private def validateRuntimeAttributes: Future[Unit] = {
+    def badRuntimeAttrsForTask(task: Task) = {
+      runtimeAttributeValidators map { case (attributeName, validator) =>
+        val expression = task.runtimeAttributes.attrs.get(attributeName)
+        attributeName -> (expression, validator(expression))
+      } collect {
+        case (name, (expression, false)) => s"Task ${task.name} has an invalid runtime attribute $name = ${expression map { _.valueString} getOrElse "!! NOT FOUND !!"}"
+      }
+    }
 
-    coerceDefaultRuntimeAttributes(workflowDescriptor.workflowOptions) match {
-      case Success(defaultRuntimeAttributes) =>
-
-        def defaultRuntimeAttribute(name: String): Option[WdlExpression] = {
-          defaultRuntimeAttributes.get(name) map { v => WdlExpression.fromString(v.valueString)}
-        }
-
-        def badRuntimeAttrsForTask(task: Task) = {
-          runtimeAttributeValidators map { case (attributeName, validator) =>
-            val expression = task.runtimeAttributes.attrs.get(attributeName) orElse defaultRuntimeAttribute(attributeName)
-            attributeName -> (expression, validator(expression))
-          } collect {
-            case (name, (expression, false)) => s"Task ${task.name} has an invalid runtime attribute $name = ${expression map { _.valueString} getOrElse "!! NOT FOUND !!"}"
-          }
-        }
-
-        calls map { _.task } flatMap badRuntimeAttrsForTask match {
-          case errors if errors.isEmpty => Future.successful(())
-          case errors => Future.failed(new IllegalArgumentException(errors.mkString(". ")))
-        }
-      case Failure(t) => Future.failed(t)
+    calls map { _.task } flatMap badRuntimeAttrsForTask match {
+      case errors if errors.isEmpty => Future.successful(())
+      case errors => Future.failed(new IllegalArgumentException(errors.mkString(". ")))
     }
   }
 

@@ -62,8 +62,4 @@ class HtCondorInitializationActor(override val workflowDescriptor: BackendWorkfl
       }
     }
   }
-
-  override protected def coerceDefaultRuntimeAttributes(options: WorkflowOptions): Try[Map[String, WdlValue]] = {
-    RuntimeAttributesDefault.workflowOptionsDefault(options, HtCondorRuntimeAttributes.coercionMap)
-  }
 }

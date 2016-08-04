@@ -40,11 +40,6 @@ class ConfigInitializationActor(params: SharedFileSystemInitializationActorParam
 
   override lazy val initializationData = {
     val wdlNamespace = configWdlNamespace.wdlNamespace
-    new ConfigInitializationData(workflowPaths, runtimeAttributesBuilder, declarationValidations, wdlNamespace)
-  }
-
-  override lazy val runtimeAttributesBuilder = {
-    val declared = declarationValidations.map(_.makeValidation())
-    super.runtimeAttributesBuilder.withValidation(declared: _*)
+    new ConfigInitializationData(workflowPaths, params.runtimeAttributesBuilder, declarationValidations, wdlNamespace)
   }
 }

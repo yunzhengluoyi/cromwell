@@ -4,6 +4,8 @@ import cromwell.backend.BackendConfigurationDescriptor
 import cromwell.backend.sfs._
 import lenthall.config.ScalaConfig._
 import cromwell.backend.impl.sfs.config.ConfigConstants._
+import cromwell.core.{ErrorOr, WorkflowOptions}
+import wdl4s.values.WdlValue
 
 /**
   * Builds a backend by reading the job control from the config.

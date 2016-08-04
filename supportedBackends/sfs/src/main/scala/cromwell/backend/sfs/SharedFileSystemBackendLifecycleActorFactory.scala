@@ -2,19 +2,26 @@ package cromwell.backend.sfs
 
 import akka.actor.{ActorRef, Props}
 import cromwell.backend.BackendJobExecutionActor.BackendJobExecutionResponse
-import cromwell.backend.{BackendConfigurationDescriptor, BackendInitializationData, BackendJobDescriptor, BackendJobDescriptorKey, BackendLifecycleActorFactory, BackendWorkflowDescriptor}
-import cromwell.core.Dispatcher
+import cromwell.backend.validation.RuntimeAttributesDefault
+import cromwell.backend._
+import cromwell.core.{Dispatcher, ErrorOr, WorkflowOptions}
 import wdl4s.Call
 import wdl4s.expression.WdlStandardLibraryFunctions
+import wdl4s.values.WdlValue
 
 import scala.concurrent.Promise
 
+object SharedFileSystemBackendLifecycleActorFactory {
+  private[sfs] val RuntimeAttributesBuilder: SharedFileSystemValidatedRuntimeAttributesBuilder =
+    SharedFileSystemValidatedRuntimeAttributesBuilder.default
+}
 /**
   * A factory that can be extended for any shared file system implementation.
   *
   * See the SharedFileSystemAsyncJobExecutionActor for more info.
   */
 trait SharedFileSystemBackendLifecycleActorFactory extends BackendLifecycleActorFactory {
+  import SharedFileSystemBackendLifecycleActorFactory._
 
   /**
     * Config values for the backend, and a pointer to the global config.
@@ -43,7 +50,7 @@ trait SharedFileSystemBackendLifecycleActorFactory extends BackendLifecycleActor
   override def workflowInitializationActorProps(workflowDescriptor: BackendWorkflowDescriptor, calls: Seq[Call],
                                                 serviceRegistryActor: ActorRef) = {
     val params = SharedFileSystemInitializationActorParams(serviceRegistryActor, workflowDescriptor,
-      configurationDescriptor, calls)
+      configurationDescriptor, calls, RuntimeAttributesBuilder)
     Option(Props(initializationActorClass, params).withDispatcher(Dispatcher.BackendDispatcher))
   }
 
@@ -65,5 +72,9 @@ trait SharedFileSystemBackendLifecycleActorFactory extends BackendLifecycleActor
                                            initializationData: Option[BackendInitializationData]):
   WdlStandardLibraryFunctions = {
     SharedFileSystemExpressionFunctions(workflowDescriptor, configurationDescriptor, jobKey, initializationData)
+  }
+
+  def coerceDefaultRuntimeAttributes(options: WorkflowOptions): ErrorOr[Map[String, WdlValue]] = {
+    RuntimeAttributesDefault.workflowOptionsDefault(options, RuntimeAttributesBuilder.validations.map(v => v.key -> v.coercion).toMap)
   }
 }
