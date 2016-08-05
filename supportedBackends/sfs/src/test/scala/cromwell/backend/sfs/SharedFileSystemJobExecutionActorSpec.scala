@@ -60,7 +60,7 @@ class SharedFileSystemJobExecutionActorSpec extends TestKitSuite("SharedFileSyst
     }
 
     TestActorRef(new SharedFileSystemJobExecutionActor(
-      jobDescriptor, configurationDescriptor, propsCreator))
+      jobDescriptor, configurationDescriptor, emptyActor, propsCreator))
   }
 
   behavior of "SharedFileSystemJobExecutionActor"

@@ -137,14 +137,28 @@ class DispatchedConfigAsyncJobExecutionActor(override val params: SharedFileSyst
   }
 
   /**
+    * Checks if the job is alive using the command from the config.
+    *
+    * @param job The job to check.
+    * @return A command that checks if the job is alive.
+    */
+  override def checkAliveArgs(job: SharedFileSystemJob) = {
+    jobScriptArgs(job, "check", CheckAliveTask)
+  }
+
+  /**
     * Kills the job using the kill command from the config.
     *
     * @param job The job id to kill.
     * @return A command that may be used to kill the job.
     */
   override def killArgs(job: SharedFileSystemJob) = {
-    val killScript = pathPlusSuffix(jobPaths.script, "kill")
-    writeTaskScript(killScript, KillTask, Map(JobIdInput -> WdlString(job.jobId)))
-    SharedFileSystemCommand("/bin/bash", killScript)
+    jobScriptArgs(job, "kill", KillTask)
+  }
+
+  def jobScriptArgs(job: SharedFileSystemJob, suffix: String, task: String) = {
+    val script = pathPlusSuffix(jobPaths.script, suffix)
+    writeTaskScript(script, task, Map(JobIdInput -> WdlString(job.jobId)))
+    SharedFileSystemCommand("/bin/bash", script)
   }
 }

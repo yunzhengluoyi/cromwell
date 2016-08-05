@@ -8,7 +8,7 @@ import better.files._
 import com.typesafe.config.ConfigFactory
 import cromwell.backend.BackendJobExecutionActor.BackendJobExecutionResponse
 import cromwell.backend.BackendLifecycleActor.AbortJobCommand
-import cromwell.backend.async.AsyncBackendJobExecutionActor.{ExecutionMode, JobId}
+import cromwell.backend.async.AsyncBackendJobExecutionActor._
 import cromwell.backend.async.{AbortedExecutionHandle, AsyncBackendJobExecutionActor, ExecutionHandle, FailedNonRetryableExecutionHandle, NonRetryableExecution, SuccessfulExecutionHandle}
 import cromwell.backend.io.{JobPaths, WorkflowPathsBackendInitializationData}
 import cromwell.backend.validation._
@@ -16,15 +16,20 @@ import cromwell.backend.{BackendConfigurationDescriptor, BackendInitializationDa
 import cromwell.core.JobOutputs
 import cromwell.core.logging.JobLogging
 import cromwell.core.retry.SimpleExponentialBackoff
+import cromwell.services.keyvalue.KeyValueService.{KvPair, KvPut, KvPutSuccess, ScopedKey}
 import cromwell.services.metadata.MetadataService.PutMetadataAction
 import cromwell.services.metadata._
 import wdl4s.WdlExpression
 import wdl4s.util.TryUtil
 import wdl4s.values.{WdlArray, WdlFile, WdlMap, WdlValue}
 
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
-import scala.concurrent.duration._
+
+object SharedFileSystemJob {
+  val JobIdKey = "sfs_job_id"
+}
 
 /**
   * A generic job that runs and tracks some string identifier for the job.
@@ -108,6 +113,14 @@ trait SharedFileSystemAsyncJobExecutionActor
   def getJob(exitValue: Int, stdout: Path, stderr: Path): SharedFileSystemJob
 
   /**
+    * Returns the command for checking if a job is alive, returing non-zero if the job cannot be found or has errored.
+    *
+    * @param job The job to check.
+    * @return The command for checking if a job is alive.
+    */
+  def checkAliveArgs(job: SharedFileSystemJob): SharedFileSystemCommand
+
+  /**
     * Returns the command for killing a job.
     *
     * @param job The job to kill.
@@ -167,6 +180,7 @@ trait SharedFileSystemAsyncJobExecutionActor
   def sharedReceive(jobOption: Option[SharedFileSystemJob]): Receive = LoggingReceive {
     case AbortJobCommand =>
       jobOption foreach tryKill
+    case KvPutSuccess(_) => // expected after the KvPut in tellKvJobId
   }
 
   def instantiatedScript: String = {
@@ -181,8 +195,18 @@ trait SharedFileSystemAsyncJobExecutionActor
   override def executeOrRecover(mode: ExecutionMode)(implicit ec: ExecutionContext) = {
     // Run now in receive, not in yet another Runnable.
     Future.fromTry(Try {
-      tellMetadata(startMetadataEvents)
-      executeScript()
+      mode match {
+        case Execute =>
+          tellMetadata(startMetadataEvents)
+          executeScript()
+        case Recover(recoveryId) =>
+          recoveryId match {
+            case job: SharedFileSystemJob => recoverScript(job)
+            case other => throw new RuntimeException(s"Unable to recover $other")
+          }
+        case _: UseCachedCall =>
+          ??? // TODO: PBE: Implement!
+      }
     } recoverWith {
       case exception: Exception =>
         jobLogger.error("Error attempting to execute the script", exception)
@@ -236,6 +260,7 @@ trait SharedFileSystemAsyncJobExecutionActor
     } else {
       val runningJob = getJob(exitValue, runner.stdoutPath, runner.stderrPath)
       context.become(sharedReceive(Option(runningJob)) orElse super.receive)
+      tellKvJobId(runningJob)
       jobLogger.info(s"job id: ${runningJob.jobId}")
       tellMetadata(Seq(metadataEvent("jobId", runningJob.jobId)))
       SharedFileSystemPendingExecutionHandle(jobDescriptor, runningJob)
@@ -264,6 +289,38 @@ trait SharedFileSystemAsyncJobExecutionActor
           |$instantiatedCommand
           |echo $$? > rc
           |""".stripMargin)
+  }
+
+  /**
+    * Send the job id of the running job to the key value store.
+    *
+    * @param runningJobOption The running job.
+    */
+  private def tellKvJobId(runningJobOption: SharedFileSystemJob): Unit = {
+    val kvKey = ScopedKey(jobDescriptor.descriptor.id, jobDescriptor.key, SharedFileSystemJob.JobIdKey)
+    val kvValue = Option(runningJobOption.jobId)
+    serviceRegistryActor ! KvPut(KvPair(kvKey, kvValue))
+  }
+
+  def recoverScript(job: SharedFileSystemJob): ExecutionHandle = {
+    context.become(sharedReceive(Option(job)) orElse super.receive)
+    if (jobPaths.returnCode.exists || isAlive(job)) {
+      // If we're done, we'll get to the rc during the next poll.
+      // Or if we're still running, return pending also.
+      SharedFileSystemPendingExecutionHandle(jobDescriptor, job)
+    } else {
+      // Could start executeScript(), but for now fail because we shouldn't be in this state.
+      FailedNonRetryableExecutionHandle(new RuntimeException(
+        s"Unable to determine that ${job.jobId} is alive, and ${jobPaths.returnCode.fullPath} does not exist."), None)
+    }
+  }
+
+  def isAlive(job: SharedFileSystemJob): Boolean = {
+    val argv = checkAliveArgs(job).argv
+    val stdout = pathPlusSuffix(jobPaths.stdout, "check")
+    val stderr = pathPlusSuffix(jobPaths.stderr, "check")
+    val checkAlive = new ProcessRunner(argv, stdout, stderr)
+    checkAlive.run() == 0
   }
 
   def tryKill(job: SharedFileSystemJob): Unit = {
