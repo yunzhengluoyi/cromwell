@@ -1,32 +1,34 @@
 package cromwell
 
-import akka.testkit._
+import cromwell.core.FullyQualifiedName
 import cromwell.core.Tags.DockerTest
-import wdl4s.values.WdlString
-import cromwell.util.SampleWdl
+import wdl4s.values.{WdlString, WdlValue}
+import cromwell.util.SampleWdl.GlobtasticWorkflow
+import org.scalatest.{FlatSpec, Matchers}
 
 import scala.language.postfixOps
 
-class GlobbingWorkflowSpec extends CromwellTestkitSpec {
-  def doTheTest(runtime: String = "") = {
-    val outputs = runWdl(
-      sampleWdl = SampleWdl.GlobtasticWorkflow,
-      eventFilter = EventFilter.info(pattern = s"transition from FinalizingWorkflowState to WorkflowSucceededState", occurrences = 1),
-      runtime = runtime
-    )
+// FIXME (for Code Review): This is covered (only for docker) by centaur. I believe this should go away
+class GlobbingWorkflowSpec extends FlatSpec with Matchers {
+  import NewFandangledTestThing.withTestThing
 
-    // The order in which files glob is apparently not guaranteed, so accept any permutation.
-    val permutations = for {
-      permutation <- Seq('a', 'b', 'c').permutations
-    } yield WdlString(permutation.mkString("\n"))
+  behavior of "GlobbingWorkflow"
 
-    val actual = outputs.get("w.B.B_out").get
-    permutations collectFirst { case s: WdlString if s == actual => s } should not be empty
+  it should "run properly" in doTheTest()
+
+  it should "run properly in a Docker environment" taggedAs DockerTest in doTheTest("""runtime { docker: "ubuntu:latest" }""")
+
+  def doTheTest(runtime: String = "") = withTestThing {
+    _.testWdl(GlobtasticWorkflow, runtime = runtime, outputCheck = Option(checkOutputs))
   }
 
-  val newline = System.lineSeparator
-  "A workflow with globbed outputs" should {
-    "run properly" in doTheTest()
-    "run properly in a Docker environment" taggedAs DockerTest in doTheTest("""runtime { docker: "ubuntu:latest" }""")
+  def checkOutputs(outputs: Map[FullyQualifiedName, WdlValue]): Boolean = {
+    // The order in which files glob is apparently not guaranteed, so accept any permutation.
+    val permutations = for {
+      permutation <- List('a', 'b', 'c').permutations
+    } yield WdlString(permutation.mkString("\n"))
+
+    val actual = outputs("w.B.B_out")
+    permutations collectFirst { case s: WdlString if s == actual => s } isDefined
   }
 }

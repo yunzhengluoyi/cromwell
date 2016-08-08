@@ -1,10 +1,42 @@
 package cromwell
 
-import akka.testkit._
+import akka.testkit.EventFilter
 import cromwell.core.WorkflowFailed
-import cromwell.util.SampleWdl
+import cromwell.util.SampleWdl.WorkflowFailSlow
+import org.scalatest.{FlatSpec, Matchers}
 
-class WorkflowFailSlowSpec extends CromwellTestkitSpec {
+class WorkflowFailSlowSpec extends FlatSpec with Matchers {
+  import WorkflowFailSlowSpec._
+  import NewFandangledTestThing.withTestThing
+
+  behavior of "A workflow containing a failing task"
+
+  it should "complete other tasks but ultimately fail, for ContinueWhilePossible" in {
+    withTestThing {
+      _.testWdl(WorkflowFailSlow,
+        workflowOptions = FailSlowOptions,
+        terminalState = WorkflowFailed,
+        eventFilter = WorkflowFailSlowEventFilter(1))
+    }
+  }
+
+  it should "not complete any other tasks and ultimately fail, for NoNewCalls" in {
+    withTestThing {
+      _.testWdl(WorkflowFailSlow,
+        workflowOptions = FailFastOptions,
+        terminalState = WorkflowFailed,
+        eventFilter = WorkflowFailSlowEventFilter(0))
+    }
+  }
+
+  it should "behave like NoNewCalls, if no workflowFailureMode is set" in {
+    withTestThing {
+      _.testWdl(WorkflowFailSlow, terminalState = WorkflowFailed, eventFilter = WorkflowFailSlowEventFilter(0))
+    }
+  }
+}
+
+object WorkflowFailSlowSpec {
   val FailSlowOptions =
     """
       |{
@@ -19,38 +51,5 @@ class WorkflowFailSlowSpec extends CromwellTestkitSpec {
       |}
     """.stripMargin
 
-  "A workflow containing a failing task" should {
-    "complete other tasks but ultimately fail, for ContinueWhilePossible" in {
-      runWdl(
-        sampleWdl = SampleWdl.WorkflowFailSlow,
-        workflowOptions = FailSlowOptions,
-        eventFilter = EventFilter.info(pattern = "Job wf.E:NA:1 succeeded", occurrences = 1),
-        runtime = "",
-        terminalState = WorkflowFailed
-      )
-    }
-  }
-
-  "A workflow containing a failing task" should {
-    "not complete any other tasks and ultimately fail, for NoNewCalls" in {
-      runWdl(
-        sampleWdl = SampleWdl.WorkflowFailSlow,
-        workflowOptions = FailFastOptions,
-        eventFilter = EventFilter.info(pattern = s"Job wf.E:NA:1 succeeded!", occurrences = 0),
-        runtime = "",
-        terminalState = WorkflowFailed
-      )
-    }
-  }
-
-  "A workflow containing a failing task" should {
-    "behave like NoNewCalls, if no workflowFailureMode is set" in {
-      runWdl(
-        sampleWdl = SampleWdl.WorkflowFailSlow,
-        eventFilter = EventFilter.info(pattern = s"Job wf.E:NA:1 succeeded!", occurrences = 0),
-        runtime = "",
-        terminalState = WorkflowFailed
-      )
-    }
-  }
+  def WorkflowFailSlowEventFilter(n: Int) = EventFilter.info(pattern = "Job wf.E:NA:1 succeeded", occurrences = n)
 }

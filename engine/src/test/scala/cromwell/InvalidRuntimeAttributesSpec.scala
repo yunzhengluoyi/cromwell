@@ -1,22 +1,15 @@
 package cromwell
 
-import akka.testkit.EventFilter
-import cromwell.core.WorkflowSucceeded
-import cromwell.engine._
-import cromwell.util.SampleWdl
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{FlatSpec, Matchers}
+import cromwell.util.SampleWdl.HelloWorld
 
-class InvalidRuntimeAttributesSpec extends CromwellTestkitSpec with BeforeAndAfterAll {
+// FIXME (for code review): This is covered by an existing Centaur test, I believe it should go away
+class InvalidRuntimeAttributesSpec extends FlatSpec with Matchers {
+  import NewFandangledTestThing.withTestThing
 
-  "A workflow with a task with one invalid runtime attribute" should {
-    "succeed" in {
-      runWdl(
-        sampleWdl = SampleWdl.HelloWorld,
-        runtime = """ runtime { wrongAttribute: "nop" }""".stripMargin,
-        eventFilter = EventFilter.info(pattern = "transition from FinalizingWorkflowState to WorkflowSucceededState", occurrences = 1),
-        terminalState = WorkflowSucceeded
-      )
-    }
+  behavior of "InvalidRuntimeAttributes"
+
+  it should "succeed a workflow with a task with one invalid runtime attribute" in {
+    withTestThing { _.testWdl(sampleWdl = HelloWorld, runtime = """ runtime { wrongAttribute: "nop" }""".stripMargin) }
   }
-
 }

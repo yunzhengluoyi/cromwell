@@ -1,10 +1,9 @@
 package cromwell.engine.backend.local
 
-import akka.testkit.EventFilter
-import cromwell.CromwellTestkitSpec
-import cromwell.CromwellTestkitSpec.TestWorkflowManagerSystem
-import cromwell.core.{WorkflowFailed, WorkflowSucceeded}
+import cromwell.NewFandangledTestThing
+import cromwell.core.WorkflowFailed
 import cromwell.util.SampleWdl
+import org.scalatest.{FlatSpec, Matchers}
 import wdl4s.WdlSource
 
 object LocalBackendSpec {
@@ -25,42 +24,30 @@ object LocalBackendSpec {
   }
 }
 
-class LocalBackendSpec extends CromwellTestkitSpec {
+class LocalBackendSpec extends FlatSpec with Matchers {
   import LocalBackendSpec._
+  import cromwell.NewFandangledTestThing.withTestThing
 
-  val testWorkflowManagerSystem = new TestWorkflowManagerSystem
+  behavior of "LocalBackend"
 
-  "LocalBackend" should {
-    "allow stdout if failOnStderr is set" in {
-      runWdl(
-        sampleWdl = StdoutWdl,
-        eventFilter = EventFilter.info(pattern = "Workflow complete", occurrences = 1),
-        runtime = "runtime {failOnStderr: true}",
-        terminalState = WorkflowSucceeded)
-    }
+  it should "allow stdout if failOnStderr is set" in {
+    withTestThing { _.testWdl(sampleWdl = StdoutWdl, runtime = "runtime { failOnStderr: true }") }
+  }
 
-    "not allow stderr if failOnStderr is set" in {
-      runWdl(
-        sampleWdl = StderrWdl,
-        eventFilter = EventFilter.info(pattern = "transitioning from FinalizingWorkflowState to WorkflowFailedState", occurrences = 1),
+  it should "not allow stderr if failOnStderr is set" in {
+    withTestThing {
+      _.testWdl(sampleWdl = StderrWdl,
+        eventFilter = NewFandangledTestThing.workflowFailureFilter,
         runtime = "runtime {failOnStderr: true}",
         terminalState = WorkflowFailed)
     }
+  }
 
-    "allow stdout if failOnStderr is not set" in {
-      runWdl(
-        sampleWdl = StdoutWdl,
-        eventFilter = EventFilter.info(pattern = "Workflow complete", occurrences = 1),
-        runtime = "runtime {failOnStderr: false}",
-        terminalState = WorkflowSucceeded)
-    }
+  it should "allow stdout if failOnStderr is not set" in {
+    withTestThing { _.testWdl(sampleWdl = StdoutWdl, runtime = "runtime {failOnStderr: false}") }
+  }
 
-    "allow stderr if failOnStderr is not set" in {
-      runWdl(
-        sampleWdl = StderrWdl,
-        eventFilter = EventFilter.info(pattern = "Workflow complete", occurrences = 1),
-        runtime = "runtime {failOnStderr: false}",
-        terminalState = WorkflowSucceeded)
-    }
+  it should "allow stderr if failOnStderr is not set" in {
+    withTestThing { _.testWdl(sampleWdl = StderrWdl, runtime = "runtime {failOnStderr: false}") }
   }
 }

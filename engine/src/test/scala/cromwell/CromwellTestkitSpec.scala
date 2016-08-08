@@ -121,7 +121,7 @@ object CromwellTestkitSpec {
 
   val TimeoutDuration = 60 seconds
 
-  // FIXME JG: Directly called here (withTestWorkflowManagerSystem & passed to CTS) and LocalBackendSpec - it's assigning one and not using (looks like a candidate for MainSpec type behavior!)
+  // FIXME JG: Directly called here (withTestWorkflowManagerSystem & passed to CTS)
   class TestWorkflowManagerSystem extends CromwellSystem {
     override protected def systemName: String = "test-system"
     override protected def newActorSystem() = ActorSystem(systemName, ConfigFactory.parseString(CromwellTestkitSpec.ConfigText))
@@ -268,6 +268,7 @@ object CromwellTestkitSpec {
   class TestCromwellRootActor(config: Config) extends CromwellRootActor {
     override lazy val serviceRegistryActor = ServiceRegistryActorInstance
     override lazy val workflowStore = new InMemoryWorkflowStore
+
     def submitWorkflow(sources: WorkflowSourceFiles): WorkflowId = {
       val submitMessage = WorkflowStoreActor.SubmitWorkflow(sources)
       val result = Await.result(workflowStoreActor.ask(submitMessage)(TimeoutDuration), Duration.Inf).asInstanceOf[WorkflowSubmittedToStore].workflowId
@@ -364,26 +365,6 @@ abstract class CromwellTestkitSpec(val twms: TestWorkflowManagerSystem = new Cro
   }
 
   def workflowSuccessFilter = EventFilter.info(pattern = "transition from FinalizingWorkflowState to WorkflowSucceededState", occurrences = 1)
-
-  def runWdl(sampleWdl: SampleWdl,
-             eventFilter: EventFilter = workflowSuccessFilter,
-             runtime: String = "",
-             workflowOptions: String = "{}",
-             terminalState: WorkflowState = WorkflowSucceeded,
-             config: Config = DefaultConfig)(implicit ec: ExecutionContext): Map[FullyQualifiedName, WdlValue] = {
-    val rootActor = buildCromwellRootActor(config)
-    val sources = WorkflowSourceFiles(sampleWdl.wdlSource(runtime), sampleWdl.wdlJson, workflowOptions)
-    val id = eventFilter.intercept {
-      within(TimeoutDuration) {
-        val workflowId = rootActor.underlyingActor.submitWorkflow(sources)
-        verifyWorkflowState(rootActor.underlyingActor.serviceRegistryActor, workflowId, terminalState)
-        getWorkflowOutputsFromMetadata(workflowId, rootActor.underlyingActor.serviceRegistryActor)
-      }
-    }
-
-    system.stop(rootActor)
-    id
-  }
 
   // FIXME JG: Used in runWdlAndAssertOutputs and runWdlAndAssertLogs and WorkflowExecutionActorSpec
   def eventually[T](isFatal: Throwable => Boolean, maxRetries: Int = 3)(f: => T): T = {
