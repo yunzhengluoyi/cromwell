@@ -8,7 +8,10 @@ import org.scalatest.{FlatSpec, Matchers}
 
 import scala.language.postfixOps
 
-// FIXME (for Code Review): This is covered (only for docker) by centaur. I believe this should go away
+/*
+  FLAGGED: This test is already covered by Centaur and is testing full workflow behavior. Identify proper units to
+  test and leave the full workflow stuff to Centaur
+ */
 class GlobbingWorkflowSpec extends FlatSpec with Matchers {
   import NewFandangledTestThing.withTestThing
 

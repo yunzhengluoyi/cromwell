@@ -5,6 +5,9 @@ import cromwell.core.WorkflowFailed
 import cromwell.util.SampleWdl.WorkflowFailSlow
 import org.scalatest.{FlatSpec, Matchers}
 
+/*
+  FLAGGED: This behavior is already covered by Centaur.
+ */
 class WorkflowFailSlowSpec extends FlatSpec with Matchers {
   import WorkflowFailSlowSpec._
   import NewFandangledTestThing.withTestThing

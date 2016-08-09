@@ -4,7 +4,10 @@ import cromwell.core.WorkflowFailed
 import cromwell.util.SampleWdl.ContinueOnReturnCode
 import org.scalatest.{FlatSpec, Matchers}
 
-// FIXME (for code review): replacing the failures with centaur tests would allow this whole thing to go away. The succeeds are already covered.
+/*
+  FLAGGED: This test is nearly fully handled by Centaur already and could be fully replicated easily. This is also
+  testing workflow-level behavior, not a unit
+ */
 
 class ContinueOnReturnCodeWorkflowSpec extends FlatSpec with Matchers {
   import NewFandangledTestThing.{withTestThing, workflowFailureFilter}

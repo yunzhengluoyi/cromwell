@@ -3,7 +3,10 @@ package cromwell
 import org.scalatest.{FlatSpec, Matchers}
 import cromwell.util.SampleWdl.HelloWorld
 
-// FIXME (for code review): This is covered by an existing Centaur test, I believe it should go away
+/*
+  FLAGGED: This behavior is covered by Centaur already. This should be morphed into a proper unit test, if it isn't
+  already somewhere
+ */
 class InvalidRuntimeAttributesSpec extends FlatSpec with Matchers {
   import NewFandangledTestThing.withTestThing
 

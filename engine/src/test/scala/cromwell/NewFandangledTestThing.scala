@@ -85,6 +85,7 @@ final case class NewFandangledTestThing(twms: TestWorkflowManagerSystem = new Te
   }
 
   private def verifyOutputs(workflowId: WorkflowId, f: Map[FullyQualifiedName, WdlValue] => Boolean): Unit = {
+    // FIXME: there's some eventual consistency issue going on here, the more advanced runWdls do some more stuff here (specifically the isFatal/eventually stuff)
     val outputs = getWorkflowOutputsFromMetadata(workflowId, rootActor.underlyingActor.serviceRegistryActor)
     if (!f(outputs)) throw new RuntimeException("Outputs did not conform to supplied function")
   }
