@@ -8,6 +8,7 @@ import com.typesafe.config.ConfigFactory
 import cromwell.database.CromwellDatabase
 import cromwell.engine.workflow.lifecycle.CopyWorkflowLogsActor
 import cromwell.engine.workflow.WorkflowManagerActor
+import cromwell.engine.workflow.lifecycle.execution.callcaching.DockerHashLookupActor
 import cromwell.engine.workflow.workflowstore.{SqlWorkflowStore, WorkflowStore, WorkflowStoreActor}
 import cromwell.jobstore.{JobStore, JobStoreActor, SqlJobStore}
 import cromwell.services.ServiceRegistryActor
@@ -43,7 +44,9 @@ import lenthall.config.ScalaConfig.EnhancedScalaConfig
   lazy val jobStore: JobStore = new SqlJobStore(CromwellDatabase.databaseInterface)
   lazy val jobStoreActor = context.actorOf(JobStoreActor.props(jobStore), "JobStoreActor")
 
-   lazy val workflowManagerActor = context.actorOf(WorkflowManagerActor.props(workflowStoreActor, serviceRegistryActor, workflowLogCopyRouter, jobStoreActor), "WorkflowManagerActor")
+  lazy val dockerHashLookupActor = context.actorOf(DockerHashLookupActor.props(25), "DockerHashLookupActor")
+
+  lazy val workflowManagerActor = context.actorOf(WorkflowManagerActor.props(workflowStoreActor, serviceRegistryActor, workflowLogCopyRouter, jobStoreActor, dockerHashLookupActor), "WorkflowManagerActor")
 
   override def receive = {
     case _ => logger.error("CromwellRootActor is receiving a message. It prefers to be left alone!")

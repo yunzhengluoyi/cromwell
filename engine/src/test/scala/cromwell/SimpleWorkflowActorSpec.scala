@@ -11,6 +11,7 @@ import cromwell.engine.workflow.WorkflowActor
 import cromwell.engine.workflow.WorkflowActor.{StartNewWorkflow, StartWorkflowCommand}
 import cromwell.services.metadata.MetadataService
 import MetadataService.PutMetadataAction
+import cromwell.engine.workflow.lifecycle.execution.callcaching.DockerHashLookupActor
 import cromwell.jobstore.{JobStoreActor, WriteCountingJobStoreDatabase}
 import cromwell.services.metadata.MetadataEvent
 import cromwell.util.SampleWdl
@@ -66,7 +67,8 @@ class SimpleWorkflowActorSpec extends CromwellTestkitSpec {
       factory = new WorkflowActor(workflowId, StartNewWorkflow, workflowSources, ConfigFactory.load(),
         watchActor,
         system.actorOf(Props.empty, s"workflow-copy-log-router-$workflowId-${UUID.randomUUID()}"),
-        system.actorOf(AlwaysHappyJobStoreActor.props)),
+        system.actorOf(AlwaysHappyJobStoreActor.props),
+        system.actorOf(DockerHashLookupActor.props(1))),
       name = s"workflow-actor-$workflowId"
     )
     WorkflowActorAndMetadataPromise(workflowActor, promise)

@@ -10,6 +10,7 @@ import cromwell.engine.workflow.WorkflowActor._
 import cromwell.engine.workflow.lifecycle.EngineLifecycleActorAbortCommand
 import cromwell.engine.workflow.lifecycle.WorkflowInitializationActor.{WorkflowInitializationAbortedResponse, WorkflowInitializationFailedResponse}
 import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActor.{WorkflowExecutionAbortedResponse, WorkflowExecutionFailedResponse, WorkflowExecutionSucceededResponse}
+import cromwell.engine.workflow.lifecycle.execution.callcaching.DockerHashLookupActor
 import cromwell.jobstore.{JobStoreActor, WriteCountingJobStoreDatabase}
 import cromwell.util.SampleWdl.ThreeStep
 import org.scalatest.BeforeAndAfter
@@ -34,6 +35,7 @@ class WorkflowActorSpec extends CromwellTestkitSpec with WorkflowDescriptorBuild
       ConfigFactory.load,
       mockServiceRegistryActor,
       system.actorOf(JobStoreActor.props(WriteCountingJobStoreDatabase.makeNew)),
+      system.actorOf(DockerHashLookupActor.props(1)),
       TestProbe().ref))
     actor.setState(stateName = state, stateData = WorkflowActorData(Option(currentLifecycleActor.ref), Option(descriptor),
       AllBackendInitializationData.empty, StateCheckpoint(InitializingWorkflowState)))
