@@ -41,6 +41,7 @@
     <include file="changesets/job_store.xml" relativeToChangelogFile="true" />
     <include file="changesets/callcaching.xml" relativeToChangelogFile="true" />
     <include file="changesets/metadata_migration.xml" relativeToChangelogFile="true" />
+    <include file="changesets/standardize_column_names.xml" relativeToChangelogFile="true" />
 </databaseChangeLog>
 <!--
 
