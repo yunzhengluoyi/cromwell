@@ -40,6 +40,7 @@
     <include file="changesets/backend_KV_Store.xml" relativeToChangelogFile="true" />
     <include file="changesets/job_store.xml" relativeToChangelogFile="true" />
     <include file="changesets/callcaching.xml" relativeToChangelogFile="true" />
+    <include file="changesets/standardize_column_names.xml" relativeToChangelogFile="true" />
 </databaseChangeLog>
 <!--
 
