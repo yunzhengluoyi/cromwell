@@ -12,13 +12,13 @@ import scala.language.postfixOps
 
 class JobStoreWriterSpec extends CromwellTestkitSpec with Matchers with BeforeAndAfter {
   
-  var database: WriteCountingJobStoreDatabase = _
+  var database: WriteCountingJobStore = _
   var jobStoreWriter: TestFSMRef[JobStoreWriterState, JobStoreWriterData, JobStoreWriterActor] = _
   var workflowId: WorkflowId = _
   val successResult: JobResult = JobResultSuccess(Some(0), Map.empty)
 
   before {
-    database = WriteCountingJobStoreDatabase.makeNew
+    database = WriteCountingJobStore.makeNew
     jobStoreWriter = TestFSMRef(new JobStoreWriterActor(database))
     workflowId = WorkflowId.randomId()
   }
@@ -102,7 +102,7 @@ class JobStoreWriterSpec extends CromwellTestkitSpec with Matchers with BeforeAn
   }
 }
 
-class WriteCountingJobStoreDatabase(var totalWritesCalled: Int, var jobCompletionsRecorded: Int, var workflowCompletionsRecorded: Int) extends JobStore {
+class WriteCountingJobStore(var totalWritesCalled: Int, var jobCompletionsRecorded: Int, var workflowCompletionsRecorded: Int) extends JobStore {
 
   // A Promise so that the calling tests can hang the writer on the db write.  Once the promise is completed the writer is
   // released and all further messages will be written immediately.
@@ -121,6 +121,6 @@ class WriteCountingJobStoreDatabase(var totalWritesCalled: Int, var jobCompletio
   override def readJobResult(jobStoreKey: JobStoreKey)(implicit ec: ExecutionContext): Future[Option[JobResult]] = throw new NotImplementedError()
 }
 
-object WriteCountingJobStoreDatabase {
-  def makeNew = new WriteCountingJobStoreDatabase(0, 0, 0)
+object WriteCountingJobStore {
+  def makeNew = new WriteCountingJobStore(0, 0, 0)
 }
