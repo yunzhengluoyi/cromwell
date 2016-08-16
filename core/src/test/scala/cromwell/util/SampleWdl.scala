@@ -171,50 +171,50 @@ object SampleWdl {
 
     val rawInputs = Map.empty[String, Any]
   }
-
-  object Incr extends SampleWdl {
-    override def wdlSource(runtime: String = "") =
-    """
-      |task incr {
-      |  Int val
-      |  command {
-      |    echo $((${val} + 1))
-      |  }
-      |  output {
-      |    Int out = read_int(stdout())
-      |  }
-      |}
-      |
-      |workflow incr {
-      |  call incr
-      |}
-    """.stripMargin
-
-    override val rawInputs: WorkflowRawInputs = Map("incr.incr.val" -> "x1")
-  }
-
-  object SubtractionWorkflow {
-    val WdlSource =
-      """
-        |task a {
-        |  String message
-        |  command { echo '${message}' }
-        |  output {
-        |    String message = read_string(stdout())
-        |    Int constant = 100
-        |  }
-        |}
-        |task b {
-        |  command { echo '${message} - ${Int integer}' }
-        |}
-        |workflow wf {
-        |  call a
-        |  call b {
-        |    input: message = a.message, integer = a.constant - 75
-        |  }
-        |}
-      """.stripMargin
-  }
+//
+//  object Incr extends SampleWdl {
+//    override def wdlSource(runtime: String = "") =
+//    """
+//      |task incr {
+//      |  Int val
+//      |  command {
+//      |    echo $((${val} + 1))
+//      |  }
+//      |  output {
+//      |    Int out = read_int(stdout())
+//      |  }
+//      |}
+//      |
+//      |workflow incr {
+//      |  call incr
+//      |}
+//    """.stripMargin
+//
+//    override val rawInputs: WorkflowRawInputs = Map("incr.incr.val" -> "x1")
+//  }
+//
+//  object SubtractionWorkflow {
+//    val WdlSource =
+//      """
+//        |task a {
+//        |  String message
+//        |  command { echo '${message}' }
+//        |  output {
+//        |    String message = read_string(stdout())
+//        |    Int constant = 100
+//        |  }
+//        |}
+//        |task b {
+//        |  command { echo '${message} - ${Int integer}' }
+//        |}
+//        |workflow wf {
+//        |  call a
+//        |  call b {
+//        |    input: message = a.message, integer = a.constant - 75
+//        |  }
+//        |}
+//      """.stripMargin
+//  }
 
   object CoercionNotDefined extends SampleWdl {
     override def wdlSource(runtime: String = "") = {
@@ -425,79 +425,79 @@ object SampleWdl {
       """.stripMargin
     override lazy val rawInputs = Map.empty[String, String]
   }
-
-  object NestedScatterWdl extends SampleWdl {
-    override def wdlSource(runtime: String = "") =
-      """
-        task A {
-        |  command {
-        |    echo -n -e "jeff\nchris\nmiguel\nthibault\nkhalid\nscott"
-        |  }
-        |  output {
-        |    Array[String] A_out = read_lines(stdout())
-        |  }
-        |}
-        |
-        |task B {
-        |  String B_in
-        |  command {
-        |    python -c "print(len('${B_in}'))"
-        |  }
-        |  output {
-        |    Int B_out = read_int(stdout())
-        |  }
-        |}
-        |
-        |task C {
-        |  Int C_in
-        |  command {
-        |    python -c "print(${C_in}*100)"
-        |  }
-        |  output {
-        |    Int C_out = read_int(stdout())
-        |  }
-        |}
-        |
-        |task D {
-        |  Array[Int] D_in
-        |  command {
-        |    python -c "print(${sep = '+' D_in})"
-        |  }
-        |  output {
-        |    Int D_out = read_int(stdout())
-        |  }
-        |}
-        |
-        |task E {
-        |  command {
-        |    python -c "import random; print(random.randint(1,100))"
-        |  }
-        |  output {
-        |    Int E_out = read_int(stdout())
-        |  }
-        |}
-        |
-        |workflow w {
-        |  call A
-        |  scatter (item in A.A_out) {
-        |    call B {input: B_in = item}
-        |    call C {input: C_in = B.B_out}
-        |    call E
-        |    scatter (itemB in B.B_out) {
-        |     call E as G
-        |    }
-        |    scatter (itemB in B.B_out) {
-        |     call E as H
-        |    }
-        |  }
-        |  scatter (item in A.A_out) {
-        |    call E as F
-        |  }
-        |  call D {input: D_in = B.B_out}
-        |}
-      """.stripMargin
-    override lazy val rawInputs = Map("" -> "...")
-  }
+//
+//  object NestedScatterWdl extends SampleWdl {
+//    override def wdlSource(runtime: String = "") =
+//      """
+//        task A {
+//        |  command {
+//        |    echo -n -e "jeff\nchris\nmiguel\nthibault\nkhalid\nscott"
+//        |  }
+//        |  output {
+//        |    Array[String] A_out = read_lines(stdout())
+//        |  }
+//        |}
+//        |
+//        |task B {
+//        |  String B_in
+//        |  command {
+//        |    python -c "print(len('${B_in}'))"
+//        |  }
+//        |  output {
+//        |    Int B_out = read_int(stdout())
+//        |  }
+//        |}
+//        |
+//        |task C {
+//        |  Int C_in
+//        |  command {
+//        |    python -c "print(${C_in}*100)"
+//        |  }
+//        |  output {
+//        |    Int C_out = read_int(stdout())
+//        |  }
+//        |}
+//        |
+//        |task D {
+//        |  Array[Int] D_in
+//        |  command {
+//        |    python -c "print(${sep = '+' D_in})"
+//        |  }
+//        |  output {
+//        |    Int D_out = read_int(stdout())
+//        |  }
+//        |}
+//        |
+//        |task E {
+//        |  command {
+//        |    python -c "import random; print(random.randint(1,100))"
+//        |  }
+//        |  output {
+//        |    Int E_out = read_int(stdout())
+//        |  }
+//        |}
+//        |
+//        |workflow w {
+//        |  call A
+//        |  scatter (item in A.A_out) {
+//        |    call B {input: B_in = item}
+//        |    call C {input: C_in = B.B_out}
+//        |    call E
+//        |    scatter (itemB in B.B_out) {
+//        |     call E as G
+//        |    }
+//        |    scatter (itemB in B.B_out) {
+//        |     call E as H
+//        |    }
+//        |  }
+//        |  scatter (item in A.A_out) {
+//        |    call E as F
+//        |  }
+//        |  call D {input: D_in = B.B_out}
+//        |}
+//      """.stripMargin
+//    override lazy val rawInputs = Map("" -> "...")
+//  }
 
   object OptionalParamWorkflow extends SampleWdl {
     override def wdlSource(runtime: String): WdlSource =
@@ -611,141 +611,141 @@ object SampleWdl {
   object DefaultParameterValueWithNOValueSpecified extends DefaultParameterValue {
     override val rawInputs = Map.empty[String, String]
   }
-  object CannedThreeStep extends SampleWdl {
-    val CannedProcessOutput =
-      """
-        |USER              PID  %CPU %MEM      VSZ    RSS   TT  STAT STARTED      TIME COMMAND
-        |joeblaux         10344   4.5 20.6  7011548 3454616  ??  S    Mon06AM 275:26.10 /Applications/IntelliJ IDEA 14.app/Contents/MacOS/idea
-        |joeblaux           883   2.2  0.5  2716336  85768   ??  S    Sun08AM   0:52.64 /Applications/Utilities/Terminal.app/Contents/MacOS/Terminal
-        |_coreaudiod        577   1.9  0.1  2522428   9572   ??  Ss   Sun08AM  55:39.69 /usr/sbin/coreaudiod
-        |_windowserver      130   1.6  1.9  4535136 319588   ??  Ss   Sun08AM 148:39.39 /System/Library/Frameworks/ApplicationServices.framework/Frameworks/CoreGraphics.framework/Resources/WindowServer -daemon
-        |joeblaux          6440   1.4  2.2  4496164 362136   ??  S    Sun09PM  74:29.40 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-      """.stripMargin.trim
-
-    override def wdlSource(runtime: String): WdlSource =
-      """
-        |task ps {
-        |  File dummy_ps_file
-        |  command {
-        |    cat ${dummy_ps_file}
-        |  }
-        |  output {
-        |    File procs = stdout()
-        |  }
-        |  RUNTIME
-        |}
-        |
-        |task cgrep {
-        |  String pattern
-        |  File in_file
-        |  command {
-        |    grep '${pattern}' ${in_file} | wc -l
-        |  }
-        |  output {
-        |    Int count = read_int(stdout())
-        |  }
-        |  RUNTIME
-        |}
-        |
-        |task wc {
-        |  File in_file
-        |  command {
-        |    cat ${in_file} | wc -l
-        |  }
-        |  output {
-        |    Int count = read_int(stdout())
-        |  }
-        |  RUNTIME
-        |}
-        |
-        |workflow three_step {
-        |  call ps
-        |  call ps as ps2
-        |  call ps as ps3
-        |  call cgrep {
-        |    input: in_file = ps.procs
-        |  }
-        |  call wc {
-        |    input: in_file = ps.procs
-        |  }
-        |}
-      """.stripMargin.replaceAll("RUNTIME", runtime)
-
-    private def createCannedPsFile: File = {
-      val file = File.createTempFile("canned_ps", ".out")
-      val writer = new FileWriter(file)
-      writer.write(CannedProcessOutput)
-      writer.flush()
-      writer.close()
-      file
-    }
-
-    override val rawInputs = {
-      Map(
-        "three_step.cgrep.pattern" -> "joeblaux",
-        "three_step.ps.dummy_ps_file" -> createCannedPsFile.getAbsolutePath,
-        "three_step.ps2.dummy_ps_file" -> createCannedPsFile.getAbsolutePath,
-        "three_step.ps3.dummy_ps_file" -> createCannedPsFile.getAbsolutePath
-      )
-    }
-  }
-
-  object CannedFilePassing extends SampleWdl {
-    override def wdlSource(runtime: String = "") =
-      """
-        |task ps {
-        |  command {
-        |    (echo "x"; echo "y"; echo "z") > myfile.txt
-        |  }
-        |  output {
-        |    File procs = "myfile.txt"
-        |  }
-        |  runtime {
-        |    docker: "ubuntu:latest"
-        |  }
-        |}
-        |
-        |task cgrep {
-        |  String pattern
-        |  File in_file
-        |  command {
-        |    grep '${pattern}' ${in_file} | wc -l
-        |  }
-        |  output {
-        |    Int count = read_int(stdout())
-        |  }
-        |  runtime {
-        |    docker: "ubuntu:latest"
-        |  }
-        |}
-        |
-        |task wc {
-        |  File in_file
-        |  command {
-        |    cat ${in_file} | wc -l
-        |  }
-        |  output {
-        |    Int count = read_int(stdout())
-        |  }
-        |  runtime {
-        |    docker: "ubuntu:latest"
-        |  }
-        |}
-        |
-        |workflow three_step {
-        |  call ps
-        |  call cgrep {
-        |    input: in_file = ps.procs
-        |  }
-        |  call wc {
-        |    input: in_file = ps.procs
-        |  }
-        |}
-        |
-      """.stripMargin
-
-    override val rawInputs = Map(ThreeStep.PatternKey -> "x")
-  }
+//  object CannedThreeStep extends SampleWdl {
+//    val CannedProcessOutput =
+//      """
+//        |USER              PID  %CPU %MEM      VSZ    RSS   TT  STAT STARTED      TIME COMMAND
+//        |joeblaux         10344   4.5 20.6  7011548 3454616  ??  S    Mon06AM 275:26.10 /Applications/IntelliJ IDEA 14.app/Contents/MacOS/idea
+//        |joeblaux           883   2.2  0.5  2716336  85768   ??  S    Sun08AM   0:52.64 /Applications/Utilities/Terminal.app/Contents/MacOS/Terminal
+//        |_coreaudiod        577   1.9  0.1  2522428   9572   ??  Ss   Sun08AM  55:39.69 /usr/sbin/coreaudiod
+//        |_windowserver      130   1.6  1.9  4535136 319588   ??  Ss   Sun08AM 148:39.39 /System/Library/Frameworks/ApplicationServices.framework/Frameworks/CoreGraphics.framework/Resources/WindowServer -daemon
+//        |joeblaux          6440   1.4  2.2  4496164 362136   ??  S    Sun09PM  74:29.40 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+//      """.stripMargin.trim
+//
+//    override def wdlSource(runtime: String): WdlSource =
+//      """
+//        |task ps {
+//        |  File dummy_ps_file
+//        |  command {
+//        |    cat ${dummy_ps_file}
+//        |  }
+//        |  output {
+//        |    File procs = stdout()
+//        |  }
+//        |  RUNTIME
+//        |}
+//        |
+//        |task cgrep {
+//        |  String pattern
+//        |  File in_file
+//        |  command {
+//        |    grep '${pattern}' ${in_file} | wc -l
+//        |  }
+//        |  output {
+//        |    Int count = read_int(stdout())
+//        |  }
+//        |  RUNTIME
+//        |}
+//        |
+//        |task wc {
+//        |  File in_file
+//        |  command {
+//        |    cat ${in_file} | wc -l
+//        |  }
+//        |  output {
+//        |    Int count = read_int(stdout())
+//        |  }
+//        |  RUNTIME
+//        |}
+//        |
+//        |workflow three_step {
+//        |  call ps
+//        |  call ps as ps2
+//        |  call ps as ps3
+//        |  call cgrep {
+//        |    input: in_file = ps.procs
+//        |  }
+//        |  call wc {
+//        |    input: in_file = ps.procs
+//        |  }
+//        |}
+//      """.stripMargin.replaceAll("RUNTIME", runtime)
+//
+//    private def createCannedPsFile: File = {
+//      val file = File.createTempFile("canned_ps", ".out")
+//      val writer = new FileWriter(file)
+//      writer.write(CannedProcessOutput)
+//      writer.flush()
+//      writer.close()
+//      file
+//    }
+//
+//    override val rawInputs = {
+//      Map(
+//        "three_step.cgrep.pattern" -> "joeblaux",
+//        "three_step.ps.dummy_ps_file" -> createCannedPsFile.getAbsolutePath,
+//        "three_step.ps2.dummy_ps_file" -> createCannedPsFile.getAbsolutePath,
+//        "three_step.ps3.dummy_ps_file" -> createCannedPsFile.getAbsolutePath
+//      )
+//    }
+//  }
+//
+//  object CannedFilePassing extends SampleWdl {
+//    override def wdlSource(runtime: String = "") =
+//      """
+//        |task ps {
+//        |  command {
+//        |    (echo "x"; echo "y"; echo "z") > myfile.txt
+//        |  }
+//        |  output {
+//        |    File procs = "myfile.txt"
+//        |  }
+//        |  runtime {
+//        |    docker: "ubuntu:latest"
+//        |  }
+//        |}
+//        |
+//        |task cgrep {
+//        |  String pattern
+//        |  File in_file
+//        |  command {
+//        |    grep '${pattern}' ${in_file} | wc -l
+//        |  }
+//        |  output {
+//        |    Int count = read_int(stdout())
+//        |  }
+//        |  runtime {
+//        |    docker: "ubuntu:latest"
+//        |  }
+//        |}
+//        |
+//        |task wc {
+//        |  File in_file
+//        |  command {
+//        |    cat ${in_file} | wc -l
+//        |  }
+//        |  output {
+//        |    Int count = read_int(stdout())
+//        |  }
+//        |  runtime {
+//        |    docker: "ubuntu:latest"
+//        |  }
+//        |}
+//        |
+//        |workflow three_step {
+//        |  call ps
+//        |  call cgrep {
+//        |    input: in_file = ps.procs
+//        |  }
+//        |  call wc {
+//        |    input: in_file = ps.procs
+//        |  }
+//        |}
+//        |
+//      """.stripMargin
+//
+//    override val rawInputs = Map(ThreeStep.PatternKey -> "x")
+//  }
 
   object CurrentDirectory extends SampleWdl {
     override def wdlSource(runtime: String): String =
@@ -869,36 +869,36 @@ object SampleWdl {
       "two_step.flags_suffix" -> "s"
     )
   }
-
-  object StringInterpolation extends SampleWdl {
-    override def wdlSource(runtime: String = "") =
-      """
-        |task echo {
-        |  String greeting
-        |  String out
-        |  Int one = 1
-        |
-        |  command {
-        |    echo "${greeting}" > ${out}.txt
-        |    echo "${ one + 1 }" > ${one+1}.txt
-        |  }
-        |  output {
-        |    File outfile = "${ out }.txt"
-        |    Int two = read_int("${ one + 1 }.txt")
-        |  }
-        |}
-        |
-        |workflow echo_wf {
-        |  call echo
-        |}
-        |
-      """.stripMargin
-
-    override val rawInputs = Map(
-      "echo_wf.echo.greeting" -> "world",
-      "echo_wf.echo.out" -> "foobar"
-    )
-  }
+//
+//  object StringInterpolation extends SampleWdl {
+//    override def wdlSource(runtime: String = "") =
+//      """
+//        |task echo {
+//        |  String greeting
+//        |  String out
+//        |  Int one = 1
+//        |
+//        |  command {
+//        |    echo "${greeting}" > ${out}.txt
+//        |    echo "${ one + 1 }" > ${one+1}.txt
+//        |  }
+//        |  output {
+//        |    File outfile = "${ out }.txt"
+//        |    Int two = read_int("${ one + 1 }.txt")
+//        |  }
+//        |}
+//        |
+//        |workflow echo_wf {
+//        |  call echo
+//        |}
+//        |
+//      """.stripMargin
+//
+//    override val rawInputs = Map(
+//      "echo_wf.echo.greeting" -> "world",
+//      "echo_wf.echo.out" -> "foobar"
+//    )
+//  }
 
   object ArrayIO extends SampleWdl {
     override def wdlSource(runtime: String = "") =
@@ -1111,43 +1111,43 @@ object SampleWdl {
       "wf.files" -> Seq(file1.getAbsolutePath, file2.getAbsolutePath)
     )
   }
-
-  object TripleSleep extends SampleWdl {
-    override def wdlSource(runtime: String = "") =
-      """
-        |task wait {
-        |  command <<<
-        |    sleep 100
-        |    echo "waited 100 seconds"
-        |  >>>
-        |  output {
-        |    String intermediate = read_string(stdout())
-        |  }
-        |}
-        |task msg {
-        |  command {
-        |    echo ${sommat}
-        |  }
-        |  output {
-        |    String result = read_string(stdout())
-        |  }
-        |}
-        |
-        |workflow hello {
-        |  call wait as wait1
-        |  call wait as wait2
-        |  call wait as wait3
-        |
-        |  call msg as msg1 {input: sommat = wait1.intermediate}
-        |  call msg as msg2 {input: sommat = wait2.intermediate}
-        |  call msg as msg3 {input: sommat = wait3.intermediate}
-        |}
-      """.stripMargin
-
-    override val rawInputs = Map.empty[String, String]
-    val OutputKey1 = "hello.msg1.result"
-    val OutputValue = "waited 100 seconds"
-  }
+//
+//  object TripleSleep extends SampleWdl {
+//    override def wdlSource(runtime: String = "") =
+//      """
+//        |task wait {
+//        |  command <<<
+//        |    sleep 100
+//        |    echo "waited 100 seconds"
+//        |  >>>
+//        |  output {
+//        |    String intermediate = read_string(stdout())
+//        |  }
+//        |}
+//        |task msg {
+//        |  command {
+//        |    echo ${sommat}
+//        |  }
+//        |  output {
+//        |    String result = read_string(stdout())
+//        |  }
+//        |}
+//        |
+//        |workflow hello {
+//        |  call wait as wait1
+//        |  call wait as wait2
+//        |  call wait as wait3
+//        |
+//        |  call msg as msg1 {input: sommat = wait1.intermediate}
+//        |  call msg as msg2 {input: sommat = wait2.intermediate}
+//        |  call msg as msg3 {input: sommat = wait3.intermediate}
+//        |}
+//      """.stripMargin
+//
+//    override val rawInputs = Map.empty[String, String]
+//    val OutputKey1 = "hello.msg1.result"
+//    val OutputValue = "waited 100 seconds"
+//  }
 
   object BadTaskOutputWdl extends SampleWdl {
     override def wdlSource(runtime: String): WdlSource =
