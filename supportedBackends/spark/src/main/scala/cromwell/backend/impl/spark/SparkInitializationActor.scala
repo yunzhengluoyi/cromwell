@@ -1,26 +1,34 @@
 package cromwell.backend.impl.spark
 
-import akka.actor.Props
+import akka.actor.{ActorRef, Props}
+import cromwell.backend.validation.RuntimeAttributesDefault
 import cromwell.backend.validation.RuntimeAttributesKeys._
 import cromwell.backend.impl.spark.SparkInitializationActor._
-import cromwell.backend.{BackendConfigurationDescriptor, BackendWorkflowDescriptor, BackendWorkflowInitializationActor}
+import cromwell.backend.{BackendInitializationData, BackendConfigurationDescriptor, BackendWorkflowDescriptor, BackendWorkflowInitializationActor}
+import cromwell.core.WorkflowOptions
 import wdl4s.types.WdlBooleanType
+import wdl4s.values.WdlValue
 import wdl4s.{WdlExpression, Call}
 
 import scala.concurrent.Future
+import scala.util.Try
 
 object SparkInitializationActor {
   val SupportedKeys = Set(FailOnStderrKey, SparkRuntimeAttributes.ExecutorCoresKey, SparkRuntimeAttributes.ExecutorMemoryKey,
     SparkRuntimeAttributes.NumberOfExecutorsKey, SparkRuntimeAttributes.AppMainClassKey, SparkRuntimeAttributes.SparkDeployMode,
     SparkRuntimeAttributes.SparkMaster)
 
-  def props(workflowDescriptor: BackendWorkflowDescriptor, calls: Seq[Call], configurationDescriptor: BackendConfigurationDescriptor): Props =
-    Props(new SparkInitializationActor(workflowDescriptor, calls, configurationDescriptor))
+  def props(workflowDescriptor: BackendWorkflowDescriptor,
+            calls: Seq[Call],
+            configurationDescriptor: BackendConfigurationDescriptor,
+            serviceRegistryActor: ActorRef): Props =
+    Props(new SparkInitializationActor(workflowDescriptor, calls, configurationDescriptor, serviceRegistryActor))
 }
 
 class SparkInitializationActor(override val workflowDescriptor: BackendWorkflowDescriptor,
                                override val calls: Seq[Call],
-                               override val configurationDescriptor: BackendConfigurationDescriptor) extends BackendWorkflowInitializationActor {
+                               override val configurationDescriptor: BackendConfigurationDescriptor,
+                               override val serviceRegistryActor: ActorRef) extends BackendWorkflowInitializationActor {
 
   override protected def runtimeAttributeValidators: Map[String, (Option[WdlExpression]) => Boolean] = Map(
     FailOnStderrKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
@@ -40,7 +48,7 @@ class SparkInitializationActor(override val workflowDescriptor: BackendWorkflowD
   /**
     * A call which happens before anything else runs
     */
-  override def beforeAll(): Future[Unit] = Future.successful(())
+  override def beforeAll(): Future[Option[BackendInitializationData]] = Future.successful(None)
 
 
   /**
@@ -59,5 +67,9 @@ class SparkInitializationActor(override val workflowDescriptor: BackendWorkflowD
         }
       }
     }
+  }
+
+  override protected def coerceDefaultRuntimeAttributes(options: WorkflowOptions): Try[Map[String, WdlValue]] = {
+    RuntimeAttributesDefault.workflowOptionsDefault(options, SparkRuntimeAttributes.coercionMap)
   }
 }

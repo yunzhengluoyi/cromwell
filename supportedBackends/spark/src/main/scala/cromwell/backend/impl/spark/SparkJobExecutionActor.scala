@@ -5,7 +5,8 @@ import java.nio.file.attribute.PosixFilePermission
 
 import akka.actor.{Props}
 import cromwell.backend.BackendJobExecutionActor.{BackendJobExecutionResponse, FailedNonRetryableResponse, SucceededResponse}
-import cromwell.backend.io.{JobPaths, SharedFileSystem, SharedFsExpressionFunctions}
+import cromwell.backend.io.JobPaths
+import cromwell.backend.sfs.{SharedFileSystem, SharedFileSystemExpressionFunctions}
 import cromwell.backend.{BackendConfigurationDescriptor, BackendJobDescriptor, BackendJobExecutionActor}
 import wdl4s.parser.MemoryUnit
 import wdl4s.util.TryUtil
@@ -35,7 +36,7 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
   lazy val extProcess = new SparkProcess
   lazy val clusterManagerConfig = configurationDescriptor.backendConfig.getConfig("cluster-manager")
   private val fileSystemsConfig = configurationDescriptor.backendConfig.getConfig("filesystems")
-  override val sharedFsConfig = fileSystemsConfig.getConfig("local")
+  override val sharedFileSystemConfig = fileSystemsConfig.getConfig("local")
   private val workflowDescriptor = jobDescriptor.descriptor
   private val jobPaths = new JobPaths(workflowDescriptor, configurationDescriptor.backendConfig, jobDescriptor.key)
 
@@ -47,7 +48,7 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
   private lazy val stderrWriter = extProcess.tailedWriter(100, jobPaths.stderr)
 
   private val call = jobDescriptor.key.call
-  private val callEngineFunction = SharedFsExpressionFunctions(jobPaths, fileSystems)
+  private val callEngineFunction = SharedFileSystemExpressionFunctions(jobPaths, fileSystems)
 
   private val lookup = jobDescriptor.inputs.apply _
 

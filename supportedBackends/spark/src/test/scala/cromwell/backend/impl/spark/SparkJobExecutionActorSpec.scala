@@ -3,34 +3,33 @@ package cromwell.backend.impl.spark
 import java.io.{File, FileWriter, Writer}
 import java.nio.file.{Path, Paths}
 
-import akka.actor.ActorSystem
-import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
+import akka.testkit.{ImplicitSender, TestActorRef}
 import com.typesafe.config.ConfigFactory
-import cromwell.backend.{BackendConfigurationDescriptor, BackendJobDescriptor}
+import cromwell.backend.{BackendSpec, BackendConfigurationDescriptor, BackendJobDescriptor}
 import cromwell.backend.BackendJobExecutionActor.{FailedNonRetryableResponse, SucceededResponse}
 import better.files._
-import cromwell.backend.io.{BackendTestkitSpec, JobPaths}
-import cromwell.core.{PathWriter, TailedWriter, UntailedWriter}
+import cromwell.backend.io.{JobPaths}
+import cromwell.core.{TestKitSuite, PathWriter, TailedWriter, UntailedWriter}
 import org.mockito.Matchers._
 import org.mockito.Mockito
 import org.mockito.Mockito._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.mock.MockitoSugar
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Matchers, WordSpecLike}
+import org.scalatest.{BeforeAndAfter, Matchers, WordSpecLike}
 import wdl4s._
 import wdl4s.values.{WdlValue}
 
 import scala.concurrent.duration._
 import scala.sys.process.{Process, ProcessLogger}
 
-class SparkJobExecutionActorSpec extends TestKit(ActorSystem("SparkJobExecutionActor"))
-  with BackendTestkitSpec
+class SparkJobExecutionActorSpec extends TestKitSuite("SparkJobExecutionActor")
   with WordSpecLike
   with Matchers
   with MockitoSugar
   with BeforeAndAfter
-  with BeforeAndAfterAll
   with ImplicitSender {
+
+  import BackendSpec._
 
   private val sparkProcess: SparkProcess = mock[SparkProcess]
   private val sparkCommands: SparkCommands = new SparkCommands

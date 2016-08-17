@@ -78,7 +78,7 @@ object Settings {
 
   val htCondorBackendSettings = List(
     name := "cromwell-htcondor-backend",
-    libraryDependencies ++= htCondorBackendDependencies
+    libraryDependencies ++= htCondorBackendDependencies,
     version := "0.1",
     assemblyJarName in assembly := name.value + "-" + version.value + ".jar"
   ) ++ commonSettings

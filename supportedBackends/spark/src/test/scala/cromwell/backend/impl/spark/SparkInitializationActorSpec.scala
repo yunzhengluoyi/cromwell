@@ -1,19 +1,17 @@
 package cromwell.backend.impl.spark
 
-import akka.actor.ActorSystem
-import akka.testkit.{EventFilter, ImplicitSender, TestDuration, TestKit}
+import akka.testkit.{EventFilter, ImplicitSender, TestDuration}
 import com.typesafe.config.ConfigFactory
 import cromwell.backend.BackendWorkflowInitializationActor.Initialize
 import cromwell.backend.{BackendWorkflowDescriptor, BackendConfigurationDescriptor}
-import cromwell.core.{WorkflowId, WorkflowOptions}
-import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
+import cromwell.core.{TestKitSuite, WorkflowId, WorkflowOptions}
+import org.scalatest.{Matchers, WordSpecLike}
 import spray.json.{JsValue, JsObject}
 import wdl4s._
 import wdl4s.values.WdlValue
 import scala.concurrent.duration._
 
-class SparkInitializationActorSpec  extends TestKit(ActorSystem("SparkInitializationActorSpec", ConfigFactory.parseString(
-  """akka.loggers = ["akka.testkit.TestEventListener"]"""))) with WordSpecLike with Matchers with BeforeAndAfterAll with ImplicitSender {
+class SparkInitializationActorSpec  extends TestKitSuite("SparkInitializationActorSpec") with WordSpecLike with Matchers  with ImplicitSender {
 
   val Timeout = 5.second.dilated
 
@@ -49,12 +47,8 @@ class SparkInitializationActorSpec  extends TestKit(ActorSystem("SparkInitializa
     )
   }
 
-  override def afterAll {
-    system.shutdown()
-  }
-
   private def getSparkBackend(workflowDescriptor: BackendWorkflowDescriptor, calls: Seq[Call], conf: BackendConfigurationDescriptor) = {
-    system.actorOf(SparkInitializationActor.props(workflowDescriptor, calls, conf))
+    system.actorOf(SparkInitializationActor.props(workflowDescriptor, calls, conf, emptyActor))
   }
 
   "SparkInitializationActor" should {
