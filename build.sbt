@@ -44,7 +44,6 @@ lazy val htCondorBackend = (project in backendRoot / "htcondor")
   .dependsOn(sfsBackend)
   .dependsOn(backend % "test->test")
 
-
 lazy val sparkBackend = (project in backendRoot / "spark")
   .settings(sparkBackendSettings:_*)
   .withTestSettings
