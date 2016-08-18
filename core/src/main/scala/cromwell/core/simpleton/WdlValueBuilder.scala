@@ -78,6 +78,7 @@ object WdlValueBuilder {
         )                                # End capture.
 
                                   """.trim.r          // The trim is necessary as (?x) must be at the beginning of the regex.
+
   private def toWdlValue(outputType: WdlType, components: Traversable[SimpletonComponent]): WdlValue = {
 
     // Returns a tuple of the index into the outermost array and a `SimpletonComponent` whose path reflects the "descent"

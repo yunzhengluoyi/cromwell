@@ -14,7 +14,7 @@ import cromwell.core.WorkflowSourceFiles
 import cromwell.engine.workflow.SingleWorkflowRunnerActor.RunWorkflow
 import cromwell.engine.workflow.SingleWorkflowRunnerActorSpec._
 import cromwell.engine.workflow.workflowstore.{InMemoryWorkflowStore, WorkflowStoreActor}
-import cromwell.jobstore.{JobStoreActor, WriteCountingJobStoreDatabase}
+import cromwell.jobstore.{JobStoreActor, WriteCountingJobStore$}
 import cromwell.util.SampleWdl
 import cromwell.util.SampleWdl.{ExpressionsInInputs, GoodbyeWorld, ThreeStep}
 import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor3}

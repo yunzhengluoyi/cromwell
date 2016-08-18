@@ -11,7 +11,7 @@ import cromwell.engine.workflow.WorkflowActor
 import cromwell.engine.workflow.WorkflowActor.{StartNewWorkflow, StartWorkflowCommand}
 import cromwell.services.metadata.MetadataService
 import MetadataService.PutMetadataAction
-import cromwell.jobstore.{JobStoreActor, WriteCountingJobStoreDatabase}
+import cromwell.jobstore.{JobStoreActor, WriteCountingJobStore$}
 import cromwell.services.metadata.MetadataEvent
 import cromwell.util.SampleWdl
 import cromwell.util.SampleWdl.HelloWorld.Addressee
