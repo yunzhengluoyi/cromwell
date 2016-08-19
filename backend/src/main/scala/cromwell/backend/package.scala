@@ -30,7 +30,7 @@ package object backend {
                                   runtimeAttributes: Map[LocallyQualifiedName, WdlValue],
                                   inputs: Map[LocallyQualifiedName, WdlValue]) {
     val call = key.call
-    override val toString = s"${workflowDescriptor.id}:$key"
+    override val toString = s"${key.toString(workflowDescriptor.id)}"
   }
 
   /**

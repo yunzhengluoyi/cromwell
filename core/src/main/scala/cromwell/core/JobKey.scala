@@ -8,5 +8,8 @@ trait JobKey {
   def attempt: Int
   def tag: String
 
-  override def toString = s"${scope.fullyQualifiedName}:$index:$attempt"
+  override def toString = {
+    import ExecutionIndex.IndexEnhancedIndex
+    s"${scope.fullyQualifiedName}:${index.fromIndex}:$attempt"
+  }
 }

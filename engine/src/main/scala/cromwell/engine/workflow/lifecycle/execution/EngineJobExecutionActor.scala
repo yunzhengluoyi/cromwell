@@ -166,7 +166,7 @@ class EngineJobExecutionActor(jobKey: BackendJobDescriptorKey,
 
   onTransition {
     case fromState -> toState =>
-      log.info("Transitioning from {}({}) to {}({})", fromState, stateData, toState, nextStateData)
+      log.debug("Transitioning from {}({}) to {}({})", fromState, stateData, toState, nextStateData)
   }
 
   whenUnhandled {

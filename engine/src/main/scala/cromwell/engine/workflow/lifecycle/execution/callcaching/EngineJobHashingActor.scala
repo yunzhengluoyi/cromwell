@@ -57,7 +57,7 @@ case class EngineJobHashingActor(jobDescriptor: BackendJobDescriptor,
 
   onTransition {
     case fromState -> toState =>
-      log.info("Transitioning from {}({}) to {}({})", fromState, stateData, toState, nextStateData)
+      log.debug("Transitioning from {}({}) to {}({})", fromState, stateData, toState, nextStateData)
   }
 
   private def initializeEJHA() = {
