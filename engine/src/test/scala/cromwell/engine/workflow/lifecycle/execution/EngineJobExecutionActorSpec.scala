@@ -20,7 +20,7 @@ import cromwell.util.SampleWdl
 import org.scalatest.{BeforeAndAfterAll, Matchers}
 import org.specs2.mock.Mockito
 import wdl4s.expression.{NoFunctions, WdlStandardLibraryFunctions}
-import wdl4s.{Call, Task}
+import wdl4s.{Call, RuntimeAttributes, Task}
 
 class EngineJobExecutionActorSpec extends CromwellTestkitSpec with Matchers with WorkflowDescriptorBuilder with Mockito with BeforeAndAfterAll {
 
@@ -52,6 +52,7 @@ class EngineJobExecutionActorSpec extends CromwellTestkitSpec with Matchers with
   def buildEJEA(restarting: Boolean) = {
     val task = mock[Task]
     task.declarations returns Seq.empty
+    task.runtimeAttributes returns RuntimeAttributes(Map.empty)
 
     val jobStore = new SqlJobStore(CromwellDatabase.databaseInterface)
 
