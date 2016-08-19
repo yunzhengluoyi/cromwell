@@ -1,7 +1,7 @@
 package cromwell.backend.impl.sfs.config
 
 import akka.actor.ActorSystem
-import cromwell.backend.callcaching.FileContentsHasherActor.FileHashingFunction
+import cromwell.backend.callcaching.FileHasherWorkerActor.FileHashingFunction
 import cromwell.backend.{BackendConfigurationDescriptor, RuntimeAttributeDefinition}
 import cromwell.backend.sfs._
 import lenthall.config.ScalaConfig._
@@ -39,4 +39,5 @@ class ConfigBackendLifecycleActorFactory(val configurationDescriptor: BackendCon
   }
 
   override lazy val fileHashingFunction: Option[FileHashingFunction] = Option(FileHashingFunction(ConfigBackendFileHashing.getMd5Result))
+  override lazy val fileHashingWorkerCount: Int = 5
 }

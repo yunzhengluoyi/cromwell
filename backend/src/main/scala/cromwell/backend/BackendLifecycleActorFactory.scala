@@ -3,9 +3,10 @@ package cromwell.backend
 import java.nio.file.Path
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.routing.RoundRobinPool
 import com.typesafe.config.Config
-import cromwell.backend.callcaching.FileContentsHasherActor
-import cromwell.backend.callcaching.FileContentsHasherActor.FileHashingFunction
+import cromwell.backend.callcaching.FileHasherWorkerActor
+import cromwell.backend.callcaching.FileHasherWorkerActor.FileHashingFunction
 import cromwell.backend.io.WorkflowPaths
 import cromwell.core.{ExecutionStore, OutputStore}
 import wdl4s.Call
@@ -40,6 +41,12 @@ trait BackendLifecycleActorFactory {
   def runtimeAttributeDefinitions: Set[RuntimeAttributeDefinition] = Set.empty
 
   lazy val fileHashingFunction: Option[FileHashingFunction] = None
+  lazy val fileHashingWorkerCount: Int = 50
 
-  final lazy val fileContentsHasherActor: ActorRef = actorSystem.actorOf(FileContentsHasherActor.props(fileHashingFunction))
+  final lazy val fileContentsHasherActor: ActorRef = actorSystem.actorOf(RoundRobinPool(fileHashingWorkerCount)
+    .props(FileHasherWorkerActor.props(fileHashingFunction)),
+    "FileContentsHasherActor")
+
+
+    //actorSystem.actorOf(FileContentsHasherActor.props(fileHashingFunction, fileHashingWorkerCount))
 }

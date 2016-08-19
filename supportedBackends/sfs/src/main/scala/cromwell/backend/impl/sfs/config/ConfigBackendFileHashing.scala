@@ -3,7 +3,7 @@ package cromwell.backend.impl.sfs.config
 import java.io.{File, FileInputStream}
 
 import akka.event.LoggingAdapter
-import cromwell.backend.callcaching.FileContentsHasherActor.SingleFileHashRequest
+import cromwell.backend.callcaching.FileHasherWorkerActor.SingleFileHashRequest
 
 import scala.util.{Failure, Success, Try}
 

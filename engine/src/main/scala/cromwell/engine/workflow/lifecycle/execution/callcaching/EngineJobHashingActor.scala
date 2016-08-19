@@ -1,13 +1,13 @@
 package cromwell.engine.workflow.lifecycle.execution.callcaching
 
 import akka.actor.{ActorLogging, ActorRef, LoggingFSM, Props}
+import cromwell.backend.callcaching.FileHasherWorkerActor.SingleFileHashRequest
 import cromwell.backend.{BackendInitializationData, BackendJobDescriptor, RuntimeAttributeDefinition}
 import cromwell.database.sql.MetaInfoId
 import cromwell.core.simpleton.WdlValueSimpleton
 import cromwell.core.callcaching._
 import cromwell.engine.workflow.lifecycle.execution.callcaching.EngineJobHashingActor._
 import cromwell.core.callcaching.HashValue.StringMd5er
-import cromwell.backend.callcaching.FileContentsHasherActor.SingleFileHashRequest
 import cromwell.engine.workflow.lifecycle.execution.callcaching.DockerHashLookupActor.{DockerHashLookupCommand, DockerHashLookupKey}
 import cromwell.engine.workflow.lifecycle.execution.{CacheResultLookupFailure, CacheResultMatchesForHashes}
 import wdl4s.values.WdlFile
